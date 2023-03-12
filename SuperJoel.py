@@ -74,7 +74,7 @@ def input_prompt():
     return tort, img, autoimg, all_or_selected
 
 
-def visualisation(geometry, filename, Manual=False):
+def visualisation(geom, filename, Manual=False):
     # function to calculate distance between two atoms
     def distance(x1, y1, z1, x2, y2, z2):
         return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
@@ -187,6 +187,17 @@ def visualisation(geometry, filename, Manual=False):
             yaxis=noax,
             zaxis=noax),
         showlegend=False)
+    fig.add_annotation(
+        x=0.5,
+        y=0.9,
+        text= filename,
+        showarrow=False,
+        font=dict(
+            family="Arial",
+            size=30,
+            color="black"
+        )
+    )
 
     if not Manual:
         img_data = pio.to_image(fig, format='png', width=1000, height=1000)
@@ -333,8 +344,7 @@ if __name__ == "__main__":
             datarows.append([log_file, frqheader, charge, mult, imag, E_tot,
                             Etotrel, E_ok, Eokrel, H_298k, H298rel, G_298k,
                             G298rel])
-
-            datax = sorted(datarows, key=lambda x: float(x[5]))
+            datax = datarows
 
         for i in range(len(datax)):
             ws.append(datax[i])
