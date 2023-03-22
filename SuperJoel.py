@@ -13,7 +13,7 @@ import docx  # pip
 from docx.shared import *
 
 logging.basicConfig(level=logging.INFO)
-__version__ = 0.9
+__version__ = 1.0
 Hartree_to_kJ = 2625.4996394799
 
 
@@ -27,58 +27,34 @@ def do_not_overwrite(path):
 
 
 def input_prompt():
-    il, il2, il3, il4 = False, False, False, False
-    verstr = "SuperJoel ver. {} by Jonáš Schröder".format(__version__)
+    def get_input(prompt, options):
+        while True:
+            choice = input(prompt).lower()
+            for opt, aliases in options.items():
+                if choice in aliases:
+                    return opt
+            logging.error("Select a valid option !!!")
+
+    verstr = f"SuperJoel ver. {__version__} by Jonáš Schröder"
     print(verstr + "\n" + "-" * len(verstr))
 
-    while not il:
-        tot_input = input(
-            "Do you want an Excel or a Docs file? [Excel/Docs] : ").lower()
-        if tot_input in ["excel", "e"]:
-            tort, il = True, True
-        elif tot_input in ["docs", "d"]:
-            tort, il = False, True
-        else:
-            logging.error("Select a valid option !!!")
-
-    while not il2:
-        tot_input = input(
-            "Do you want images in your file? [Yes/No] : ").lower()
-        if tot_input in ["yes", "y"]:
-            img, il2 = True, True
-            while not il3:
-                tot_input = input(
-                    "\\Do you want to automatically or manually?\n"
-                    "(Automatic results may be badly rotated.) "
-                    "[Auto/Manual] : ").lower()
-                if tot_input in ["auto", "a"]:
-                    autoimg, il3 = True, True
-                elif tot_input in ["manual", "m"]:
-                    autoimg, il3 = False, True
-                else:
-                    logging.error("Select a valid option !!!")
-        elif tot_input in ["no", "n"]:
-            img, autoimg, il2 = False, False, True
-        else:
-            logging.error("Select a valid option !!!")
-
-    while not il4:
-        tot_input = input(
-            "All or only selected .log files : [All/Selected] : ").lower()
-        if tot_input in ["all", "a"]:
-            all_or_selected, il4 = True, True
-        elif tot_input in ["selected", "s"]:
-            all_or_selected, il4 = False, True
-        else:
-            logging.error("Select a valid option !!!")
+    tort = get_input("Do you want an Excel or a Docs file? [Excel/Docs] : ",
+                     {"True": ["excel", "e"], "False": ["docs", "d"]}) == "True"
+    img = get_input("Do you want images in your file? [Yes/No] : ",
+                    {"True": ["yes", "y"], "False": ["no", "n"]}) == "True"
+    autoimg = get_input("Do you want to automatically or manually? (Auto may be badly rotated) [Auto/Manual] : ",
+                        {"True": ["auto", "a"], "False": ["manual", "m"]}) == "True" if img else False
+    all_or_selected = get_input("All or only selected .log files : [All/Selected] : ",
+                                {"True": ["all", "a"], "False": ["selected", "s"]}) == "True"
     return tort, img, autoimg, all_or_selected
+
+
+def atom_distance(x1, y1, z1, x2, y2, z2):
+    return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
 
 def visualisation(geom, filename, Manual=False):
     # function to calculate distance between two atoms
-    def distance(x1, y1, z1, x2, y2, z2):
-        return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
-
     with io.StringIO(geom) as f:
         data = [line.split() for line in f]
         coordinates = [list(map(float, i[1:])) for i in data]
@@ -91,7 +67,7 @@ def visualisation(geom, filename, Manual=False):
                 continue
             x1, y1, z1 = coordinates[i]
             x2, y2, z2 = coordinates[j]
-            dist = distance(x1, y1, z1, x2, y2, z2)
+            dist = atom_distance(x1, y1, z1, x2, y2, z2)
             if atom_type[i] == 1 and dist > 0.5:
                 continue
             if atom_type[i] >= 18 and dist > 1.7:
@@ -99,105 +75,23 @@ def visualisation(geom, filename, Manual=False):
             if dist < 1.95:
                 close_pairs.append([[x1, y1, z1], [x2, y2, z2]])
 
-    fig = go.Figure(
-        data=[
-            go.Scatter3d(
-                x=[
-                    p[0][0], p[1][0]], y=[
-                    p[0][1], p[1][1]], z=[
-                        p[0][2], p[1][2]], mode='lines', line=dict(
-                            color='black', width=2)) for p in close_pairs])
+    fig = go.Figure(data=[go.Scatter3d(x=[p[0][0], p[1][0]], y=[p[0][1], p[1][1]], z=[p[0][2], p[1][2]],
+                                       mode='lines', line=dict(color='black', width=2)) for p in close_pairs])
 
-    colors = {
-        6: 'darkgray',
-        1: 'lightgray',
-        8: 'red',
-        7: 'green',
-        17: 'blue',
-        9: 'blue',
-        14: 'yellow',
-        11: "pink",
-        19: "pink",
-        11: "pink",
-        3: "pink",
-        55: "pink",
-        21: "gold",
-        72: "gold",
-        35: "blue",
-        53: "blue"}
+    colors = {6: 'darkgray', 1: 'lightgray', 8: 'red', 7: 'green', 17: 'blue', 9: 'blue', 14: 'yellow',
+              11: "pink", 19: "pink", 3: "pink", 55: "pink", 21: "gold", 72: "gold", 35: "blue", 53: "blue"}
+    sizes = {k: 7 if k > 2 else 5 for k in range(1, 37)}
 
-    sizes = {
-        1: 5,
-        2: 5,
-        3: 7,
-        4: 7,
-        5: 7,
-        6: 7,
-        8: 7,
-        9: 7,
-        10: 7,
-        11: 7,
-        12: 7,
-        13: 7,
-        14: 7,
-        15: 7,
-        16: 7,
-        17: 7,
-        18: 7,
-        19: 7,
-        20: 7,
-        21: 7,
-        22: 7,
-        23: 7,
-        24: 7,
-        25: 7,
-        26: 7,
-        27: 7,
-        28: 7,
-        29: 7,
-        30: 7,
-        31: 7,
-        32: 7,
-        33: 7,
-        34: 7,
-        35: 7,
-        36: 7}
-    fig.add_trace(
-        go.Scatter3d(
-            x=[
-                coordinates[i][0] for i in range(
-                    len(coordinates))], y=[
-                coordinates[i][1] for i in range(
-                    len(coordinates))], z=[
-                coordinates[i][2] for i in range(
-                    len(coordinates))], mode='markers', marker=dict(
-                size=[
-                    sizes.get(
-                        atom_type[i], 9) for i in range(
-                        len(coordinates))], color=[
-                    colors.get(
-                        atom_type[i], 'black') for i in range(
-                        len(coordinates))], line=dict(
-                    color='black', width=1))))
+    fig.add_trace(go.Scatter3d(x=[coord[0] for coord in coordinates], y=[coord[1] for coord in coordinates],
+                               z=[coord[2] for coord in coordinates], mode='markers',
+                               marker=dict(size=[sizes.get(atom, 9) for atom in atom_type],
+                                           color=[colors.get(atom, 'black') for atom in atom_type],
+                                           line=dict(color='black', width=1))))
 
     noax = dict(visible=False, showgrid=False, backgroundcolor="white")
-    fig.update_layout(
-        scene=dict(
-            xaxis=noax,
-            yaxis=noax,
-            zaxis=noax),
-        showlegend=False)
-    fig.add_annotation(
-        x=0.5,
-        y=0.9,
-        text= filename,
-        showarrow=False,
-        font=dict(
-            family="Arial",
-            size=30,
-            color="black"
-        )
-    )
+    fig.update_layout(scene=dict(xaxis=noax, yaxis=noax, zaxis=noax), showlegend=False)
+    fig.add_annotation(x=0.5, y=0.9, text=filename, showarrow=False,
+                       font=dict(family="Arial", size=30, color="black"))
 
     if not Manual:
         img_data = pio.to_image(fig, format='png', width=1000, height=1000)
@@ -210,19 +104,18 @@ def visualisation(geom, filename, Manual=False):
 
 
 def export_relevant(log_file):
-    frqheader = None
-    ngeom = ""
-    logging.info("Processing file {}".format(log_file))
+    frq_header, ngeom = None, ""
+    logging.info(f"Processing file {log_file}")
+
     with open(log_file, 'r') as imported_file:
-        input = imported_file.read()
+        content = imported_file.read()
 
-    # Search for the last frequency header
-    for i in re.finditer(r'---*\n (#.*?)---*', input, re.DOTALL):
+    for i in re.finditer(r'---*\n (#.*?)---*', content, re.DOTALL):
         if "freq" in "".join(j.strip() for j in i.group(0)).lower():
-            frqheader = i.group(1).replace("\n ", "")
-            frqheaderpos = i.span()
+            frq_header = i.group(1).replace("\n ", "")
+            frq_header_pos = i.span()
 
-    if not frqheader:
+    if not frq_header:
         logging.error("File {} does not contain frequencies. Skipping ..."
                       .format(log_file))
         if text_or_table:
@@ -232,84 +125,67 @@ def export_relevant(log_file):
                       "No frequency calculation Found!!!"
                       .format(log_file))
             return outstr, None
+
+    end_frq_pos = (re.search(r'Normal termination', content[frq_header_pos[1]:]).span()[1] + frq_header_pos[1])
+    frq_calc = content[frq_header_pos[0]:end_frq_pos]
+    thermochem = " " + re.search(r'(Zero-point correction= .*?\n) \n', frq_calc, re.DOTALL).group(1)
+    geom = re.findall(r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}', frq_calc, re.DOTALL)[-1]
+    for i in geom.splitlines():
+        num, atom, atype, x, y, z = i.split()
+        ngeom = ngeom + " ".join([atom, x, y, z]) + "\n"
+
+    if text_or_table:
+        charge, mult = int(
+            re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group()), \
+            int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
+        thermochem = [val for i, val in enumerate([float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', thermochem)])
+                      if i not in (1, 2, 3, 5)]
+        imag = [float(x) for x in
+                re.findall(r'-?\d*\.\d+|-?\d+', re.search(r'Low frequencies ---.*?\n', frq_calc).group(0))]
+        imag = "OK" if all(abs(val) < 30 for val in imag) else imag[0]
+        E_tot = thermochem[1] - thermochem[0]
+        E_ok, H_298k, G_298k = thermochem[1:]
+        return frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom
     else:
-        endfrqpos = (re.search(r'Normal termination', input[frqheaderpos[1]:])
-                     .span()[1] + frqheaderpos[1])
-        frqcalc = input[frqheaderpos[0]:endfrqpos]
-        thermochem = " " + re.search(r'(Zero-point correction= .*?\n) \n',
-                                     frqcalc, re.DOTALL).group(1)
-        geom = re.findall(
-            r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}',
-            frqcalc, re.DOTALL)[-1]
-        for i in geom.splitlines():
-            num, atom, atype, x, y, z = i.split()
-            ngeom = ngeom + " ".join([atom, x, y, z]) + "\n"
+        chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?\n', frq_calc).group(0)
+        lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frq_calc))
+        geomheader = "Atomic  Coordinates (Angstroms)\nAtomic#  X      Y         Z"
 
-        if text_or_table:
-            charge = int(re.search(r'-?\d+', re.search(
-                r'Charge = .*?(?= Multiplicity)', frqcalc).group(0)).group())
-            mult = int(re.search(r'-?\d+', re.search(
-                r'Multiplicity = .*?\n', frqcalc).group(0)).group())
-            thermochem = [val for i, val in enumerate(
-                [float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+',
-                                              thermochem)])
-                if i not in (1, 2, 3, 5)]
-            imag = [float(x) for x in re.findall(
-                r'-?\d*\.\d+|-?\d+', re.search(r'Low frequencies ---.*?\n',
-                                               frqcalc).group(0))]
-            imag = "OK" if all(abs(val) < 30 for val in imag) else imag[0]
-            E_tot = thermochem[1] - thermochem[0]
-            E_ok, H_298k, G_298k = thermochem[1:]
-            return frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom
-        else:
-            chrgandmult = re.search(
-                r'Charge = .*? Multiplicity = .*?\n', frqcalc).group(0)
-            lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frqcalc))
-            geomheader = ("Atomic  Coordinates (Angstroms)"
-                          "\nAtomic#  X      Y         Z")
-
-            outstr = "\n\n".join([log_file, frqheader, thermochem, lowfrqs,
-                                  chrgandmult, geomheader, ngeom])
-            return outstr, ngeom
+        outstr = "\n\n".join([log_file, frq_header, thermochem, lowfrqs, chrgandmult, geomheader, ngeom])
+        return outstr, ngeom
 
 
 if __name__ == "__main__":
     text_or_table, images, autoimg, all_or_selected = input_prompt()
-    if text_or_table:
-        export_file = "SuperJoel Excel Output.xlsx"
-    else:
-        export_file = "SuperJoel Word Output.docx"
+    export_file = "SuperJoel Excel Output.xlsx" if text_or_table else "SuperJoel Word Output.docx"
     export_file = do_not_overwrite(export_file)
+
     pre_log_files = [f for f in os.listdir() if f.endswith('.log')]
     log_files = []
+
     if not all_or_selected:
-        print(f"These are all the .log files: {log_files}")
+        print(f"These are all the .log files: {pre_log_files}")
         for file in pre_log_files:
-            tot_input = input(
-                f"Do you want to process the file: {file}? "
-                "[Yes/No] : ").lower()
+            tot_input = input(f"Do you want to process the file: {file}? [Yes/No] : ").lower()
             if tot_input in ["yes", "y"]:
                 log_files.append(file)
-            elif tot_input in ["no", "n"]:
-                pass
-            else:
+            elif tot_input not in ["no", "n"]:
                 log_files.append(file)
-                logging.error(
-                    "This was not a valid choice!!! "
-                    "The file will be processed.")
+                logging.error("This was not a valid choice!!! The file will be processed.")
     else:
         log_files = pre_log_files
+
     print("")
-    logging.info(f"This program will export data to {export_file}\n"
-                 f"{os.getcwd()}")
+    logging.info(f"This program will export data to {export_file}\n{os.getcwd()}")
 
     datarows = []
     image_data = []
+
     if not log_files:
-        logging.error("{} does not contain any .log files, "
-                      "nothing to do, Quitting now.".format(os.getcwd()))
+        logging.error(f"{os.getcwd()} does not contain any .log files, nothing to do, Quitting now.")
         quit()
-    logging.info("Exporting data to ./{}".format(export_file))
+
+    logging.info(f"Exporting data to ./{export_file}")
     if text_or_table:
         wb = Workbook()
         ws = wb.active
@@ -327,8 +203,7 @@ if __name__ == "__main__":
         for i, data in enumerate(dataset):
             log_file = log_files[i].replace(".log", "")
             if not data:
-                ws.append([log_file, 'The Reptiles have infected this'
-                           'file... It contains no frequencies!!!'])
+                ws.append([log_file, 'This file contains no frequencies!!!'])
                 continue
             frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
             if geom:
