@@ -116,18 +116,7 @@ def export_relevant(log_file):
             if "freq" in "".join(j.strip() for j in i.group(0)).lower():
                 frq_header = i.group(1).replace("\n ", "")
                 frq_header_pos = i.span()
-
-        """if not frq_header:
-            logging.error("File {} does not contain frequencies. Skipping ..."
-                        .format(log_file))
-            if text_or_table:
-                return None
-            else:
-                outstr = ("File \"{}\" skipped. \n"
-                        "No frequency calculation Found!!!"
-                        .format(log_file))
-                return outstr, None"""
-
+                
         end_frq_pos = (re.search(r'Normal termination', content[frq_header_pos[1]:]).span()[1] + frq_header_pos[1])
         frq_calc = content[frq_header_pos[0]:end_frq_pos]
         thermochem = " " + re.search(r'(Zero-point correction= .*?\n) \n', frq_calc, re.DOTALL).group(1)
