@@ -39,14 +39,12 @@ def get_input(prompt, options):
 def input_prompt():
     print(f"\n  -- SuperJoel {__version__} by Jonáš Schröder --\n")
 
-    tort = get_input("Output an Excel or a Docs file? [Excel/Docs] : ",
+    word_or_excel = get_input("Output an Excel or a Docs file? [Excel/Docs] : ",
                      {"True": ["excel", "e"], "False": ["docs", "d"]}) == "True"
-    img = get_input("Incorporate images within the file? [Yes/No] : ",
+    image = get_input("Incorporate images within the file? [Yes/No] : ",
                     {"True": ["yes", "y"], "False": ["no", "n"]}) == "True"
-    all_or_selected = get_input("Process all or only selected files : [All/Selected] : ",
-                                {"True": ["all", "a"], "False": ["selected", "s"]}) == "True"
     print("\n  -- processing --")
-    return tort, img, all_or_selected
+    return word_or_excel, image
 
 
 def atom_distance(x1, y1, z1, x2, y2, z2):
@@ -117,10 +115,10 @@ def export_relevant(log_file):
         geom = re.findall(r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}', frq_calc, re.DOTALL)[-1]
         for i in geom.splitlines():
             num, atom, atype, x, y, z = i.split()
-            ngeom = ngeom + " ".join([atom, x, y, z]) + "\n"
+            ngeom = ngeom + " ".join([atom," ", x," ", y," ", z]) + "\n"
         logging.info(f"  Processing file  :  {log_file}")
 
-        if text_or_table:
+        if word_or_excel:
             charge, mult = int(
                 re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group()), \
                 int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
@@ -135,7 +133,7 @@ def export_relevant(log_file):
         else:
             chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?\n', frq_calc).group(0)
             lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frq_calc))
-            geomheader = "Atomic  Coordinates (Angstroms)\nAtomic#  X      Y         Z"
+            geomheader = "Atomic  Coordinates (Angstroms)\nAtomic#  X            Y                Z"
 
             outstr = "\n\n".join([log_file, frq_header, thermochem, lowfrqs, chrgandmult, geomheader, ngeom])
             return outstr, ngeom
@@ -143,43 +141,17 @@ def export_relevant(log_file):
         logging.error(f" Critical failure :  {log_file}")
         outstr = "\n\n".join([log_file, "This file encountered an Error", "", "", "", "", ""])
         error_rate = error_rate + 1
-        if text_or_table:
+        if word_or_excel:
             return None
         else:
             return outstr, None
 
 
-if __name__ == "__main__":
-    text_or_table, images, all_or_selected = input_prompt()
-    export_file = "SuperJoel Excel Output.xlsx" if text_or_table else "SuperJoel Word Output.docx"
-    export_file = do_not_overwrite(export_file)
-
-    pre_log_files = [f for f in os.listdir() if f.endswith('.log')]
-    log_files = []
-    log_file_number = sum(1 for file in os.listdir() if file.endswith('.log'))
-
-    if not all_or_selected:
-        print(f"These are all the .log files: {pre_log_files}")
-        for file in pre_log_files:
-            tot_input = input(f"Do you want to process the file: {file}? [Yes/No] : ").lower()
-            if tot_input in ["yes", "y"]:
-                log_files.append(file)
-            elif tot_input not in ["no", "n"]:
-                log_files.append(file)
-                logging.error(" This was not a valid choice!!! The file will be processed.")
-    else:
-        log_files = pre_log_files
-
-    print(f"\n{os.getcwd()}/{export_file}\n")
-
+def output_file(log_files, word_or_excel, images):
     datarows = []
     image_data = []
-
-    if not log_files:
-        logging.error(f"  {os.getcwd()} does not contain any .log files,  Quitting now.")
-        quit()
-
-    if text_or_table:
+    
+    if word_or_excel:
         wb = Workbook()
         ws = wb.active
         header = ["File name", "Header", "Charge", "Multiplicity",
@@ -224,12 +196,12 @@ if __name__ == "__main__":
                     column=ws.max_column).column_letter].width = 10
                 ws.row_dimensions[ws.max_row].height = 80
                 ws.add_image(img)
-
-        wb.save(export_file)
+        return wb
 
     else:
         doc = docx.Document()
-        with open(export_file, 'w') as f:
+        for log_file in log_files:
+            outstr, geom = export_relevant(log_file)
             section = doc.sections[0]
             section.page_width = Cm(21)
             section.page_height = Cm(29.7)
@@ -239,25 +211,39 @@ if __name__ == "__main__":
             font = style.font
             font.name = 'Arial'
             font.size = Pt(11)
-            for log_file in log_files:
-                outstr, geom = export_relevant(log_file)
-                if geom:
-                    if images:
-                        imgdata = visualisation(geom, log_file)
-                        picture = doc.add_picture(io.BytesIO(imgdata))
-                        picture.height = docx.shared.Mm(140)
-                        picture.width = docx.shared.Mm(140)
-                lines = outstr.split("\n")
-                first_line = lines[0]
-                paragraph = doc.add_paragraph(first_line)
-                run = paragraph.runs[0]
-                run.bold = True
-                run.font.size = Pt(14)
-                for line in lines[1:]:
-                    doc.add_paragraph(line)
-                doc.add_page_break()
-            doc.save(export_file)
-            
-print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")          
-logging.info("  Normal termination")
+            if geom:
+                if images:
+                    imgdata = visualisation(geom, log_file)
+                    picture = doc.add_picture(io.BytesIO(imgdata))
+                    picture.height = docx.shared.Mm(140)
+                    picture.width = docx.shared.Mm(140)
+            lines = outstr.split("\n")
+            first_line = lines[0]
+            paragraph = doc.add_paragraph(first_line)
+            run = paragraph.runs[0]
+            run.bold = True
+            run.font.size = Pt(14)
+            for line in lines[1:]:
+                doc.add_paragraph(line)
+            doc.add_page_break()
+        return doc
+    
+    
+if __name__ == "__main__":
+    word_or_excel, images = input_prompt()
+    export_file = "SuperJoel Excel Output.xlsx" if word_or_excel else "SuperJoel Word Output.docx"
+    export_file = do_not_overwrite(export_file)
+    print(f"\n{os.getcwd()}/{export_file}\n")
+
+    log_files = [f for f in os.listdir() if f.endswith('.log')]
+    log_file_number = sum(1 for file in os.listdir() if file.endswith('.log'))
+
+    if word_or_excel:
+        wb = output_file(log_files, word_or_excel, images)
+        wb.save(export_file)
+    else:
+        doc = output_file(log_files, word_or_excel, images)
+        doc.save(export_file)
+
+print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
 quit()
