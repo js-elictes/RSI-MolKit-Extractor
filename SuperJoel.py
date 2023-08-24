@@ -18,6 +18,7 @@ Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 
 
+# Appends a counter to a filename to avoid overwriting existing files.
 def do_not_overwrite(path):
     filename, extension = os.path.splitext(path)
     counter = 1
@@ -27,6 +28,7 @@ def do_not_overwrite(path):
     return path
 
 
+# Takes user input and matches it against a dictionary of options.
 def get_input(prompt, options):
     while True:
         choice = input(prompt).lower()
@@ -36,6 +38,7 @@ def get_input(prompt, options):
         logging.error("Select a valid option !!!")
 
 
+# Prompts the user for output preferences (Excel or Docs) and image incorporation.
 def input_prompt():
     print(f"\n  -- SuperJoel {__version__} by Jonáš Schröder --\n")
 
@@ -47,10 +50,12 @@ def input_prompt():
     return word_or_excel, image
 
 
+# Calculates the distance between two 3D coordinates.
 def atom_distance(x1, y1, z1, x2, y2, z2):
     return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
 
+# Generates a 3D visualization of atomic coordinates.
 def visualisation(geom, filename):
     # function to calculate distance between two atoms
     with io.StringIO(geom) as f:
@@ -96,6 +101,7 @@ def visualisation(geom, filename):
     return (img_data)
 
 
+# Extracts relevant information from a Gaussian .log file.
 def export_relevant(log_file):
     global error_rate
     try:
@@ -147,88 +153,89 @@ def export_relevant(log_file):
             return outstr, None
 
 
-def output_file(log_files, word_or_excel, images):
+# Creates an Excel spreadsheet with extracted data and visualizations.
+def create_excel_output(log_files, images):
     datarows = []
     image_data = []
+    wb = Workbook()
+    ws = wb.active
+    header = ["File name", "Header", "Charge", "Multiplicity",
+                "Imag", "E-tot (Hartree)", "E-tot / rel (kJ/mol)",
+                "E-ok (Hartree)", "E-ok / rel (kJ/mol)",
+                "H-298k (Hartree)", "H-298k / rel (kJ/mol)",
+                "G-298k (Hartree)", "G-298k / rel (kJ/mol)"]
+    ws.append(header)
     
-    if word_or_excel:
-        wb = Workbook()
-        ws = wb.active
-        header = ["File name", "Header", "Charge", "Multiplicity",
-                  "Imag", "E-tot (Hartree)", "E-tot / rel (kJ/mol)",
-                  "E-ok (Hartree)", "E-ok / rel (kJ/mol)",
-                  "H-298k (Hartree)", "H-298k / rel (kJ/mol)",
-                  "G-298k (Hartree)", "G-298k / rel (kJ/mol)"]
-        ws.append(header)
-        
-        dataset = [export_relevant(i) for i in log_files]
-        Energs = [0 if not i else i[4] for i in dataset]
-        smallest = Energs.index(min(Energs))
-        
-        for i, data in enumerate(dataset):
-            log_file = log_files[i].replace(".log", "")
-            if not data:
-                ws.append([log_file, 'This file encountered an Error'])
-                continue
-            frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
-            if geom:
-                if images:
-                    image_data.append(visualisation(geom, log_file))
+    dataset = [export_relevant(i) for i in log_files]
+    Energs = [0 if not i else i[4] for i in dataset]
+    smallest = Energs.index(min(Energs))
+    
+    for i, data in enumerate(dataset):
+        log_file = log_files[i].replace(".log", "")
+        if not data:
+            ws.append([log_file, 'This file encountered an Error'])
+            continue
+        frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
+        if geom:
+            if images:
+                image_data.append(visualisation(geom, log_file))
 
-            Etotrel, Eokrel, H298rel, G298rel = [round(
-                abs(dataset[smallest][i] - data[i]) * Hartree_to_kJ, 1)
-                for i in range(4, 8)]
-            datarows.append([log_file, frqheader, charge, mult, imag, E_tot,
-                            Etotrel, E_ok, Eokrel, H_298k, H298rel, G_298k,
-                            G298rel])
-            datax = datarows
-            
-        if images:
-            for i in range(len(datax)):
-                ws.append(datax[i])
-                img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
-                img.width = 100
-                img.height = 100
-                img.anchor = ws.cell(
-                    row=ws.max_row, column=len(header) + 1).coordinate
-                ws.column_dimensions[ws.cell(
-                    row=ws.max_row,
-                    column=ws.max_column).column_letter].width = 10
-                ws.row_dimensions[ws.max_row].height = 80
-                ws.add_image(img)
-        return wb
+        Etotrel, Eokrel, H298rel, G298rel = [round(
+            abs(dataset[smallest][i] - data[i]) * Hartree_to_kJ, 1)
+            for i in range(4, 8)]
+        datarows.append([log_file, frqheader, charge, mult, imag, E_tot,
+                        Etotrel, E_ok, Eokrel, H_298k, H298rel, G_298k,
+                        G298rel])
+        
+    if images:
+        for i in range(len(datarows)):
+            ws.append(datarows[i])
+            img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
+            img.width = 100
+            img.height = 100
+            img.anchor = ws.cell(
+                row=ws.max_row, column=len(header) + 1).coordinate
+            ws.column_dimensions[ws.cell(
+                row=ws.max_row,
+                column=ws.max_column).column_letter].width = 10
+            ws.row_dimensions[ws.max_row].height = 80
+            ws.add_image(img)
+    return wb
 
-    else:
-        doc = docx.Document()
-        for log_file in log_files:
-            outstr, geom = export_relevant(log_file)
-            section = doc.sections[0]
-            section.page_width = Cm(21)
-            section.page_height = Cm(29.7)
-            style = doc.styles['Normal']
-            style.paragraph_format.space_before = Cm(0)
-            style.paragraph_format.space_after = Cm(0)
-            font = style.font
-            font.name = 'Arial'
-            font.size = Pt(11)
-            if geom:
-                if images:
-                    imgdata = visualisation(geom, log_file)
-                    picture = doc.add_picture(io.BytesIO(imgdata))
-                    picture.height = docx.shared.Mm(140)
-                    picture.width = docx.shared.Mm(140)
-            lines = outstr.split("\n")
-            first_line = lines[0]
-            paragraph = doc.add_paragraph(first_line)
-            run = paragraph.runs[0]
-            run.bold = True
-            run.font.size = Pt(14)
-            for line in lines[1:]:
-                doc.add_paragraph(line)
-            doc.add_page_break()
-        return doc
+
+# Creates a Word document with extracted data and visualizations.
+def create_word_output(log_files, images):
+    doc = docx.Document()
+    for log_file in log_files:
+        outstr, geom = export_relevant(log_file)
+        section = doc.sections[0]
+        section.page_width = Cm(21)
+        section.page_height = Cm(29.7)
+        style = doc.styles['Normal']
+        style.paragraph_format.space_before = Cm(0)
+        style.paragraph_format.space_after = Cm(0)
+        font = style.font
+        font.name = 'Arial'
+        font.size = Pt(11)
+        if geom:
+            if images:
+                imgdata = visualisation(geom, log_file)
+                picture = doc.add_picture(io.BytesIO(imgdata))
+                picture.height = docx.shared.Mm(140)
+                picture.width = docx.shared.Mm(140)
+        lines = outstr.split("\n")
+        first_line = lines[0]
+        paragraph = doc.add_paragraph(first_line)
+        run = paragraph.runs[0]
+        run.bold = True
+        run.font.size = Pt(14)
+        for line in lines[1:]:
+            doc.add_paragraph(line)
+        doc.add_page_break()
+    return doc
     
-    
+
+# The main execution block that gets user input, processes files, generates output, and saves results.   
 if __name__ == "__main__":
     word_or_excel, images = input_prompt()
     export_file = "SuperJoel Excel Output.xlsx" if word_or_excel else "SuperJoel Word Output.docx"
@@ -239,11 +246,11 @@ if __name__ == "__main__":
     log_file_number = sum(1 for file in os.listdir() if file.endswith('.log'))
 
     if word_or_excel:
-        wb = output_file(log_files, word_or_excel, images)
+        wb = create_excel_output(log_files, images)
         wb.save(export_file)
     else:
-        doc = output_file(log_files, word_or_excel, images)
+        doc = create_word_output(log_files, images)
         doc.save(export_file)
 
-print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
-quit()
+    print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
+    quit()
