@@ -12,7 +12,7 @@ from openpyxl import Workbook
 import docx  # pip
 from docx.shared import *
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.INFO)
 __version__ = "1.2 / 24.08.2023"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
@@ -45,7 +45,7 @@ def input_prompt():
                     {"True": ["yes", "y"], "False": ["no", "n"]}) == "True"
     all_or_selected = get_input("Process all or only selected files : [All/Selected] : ",
                                 {"True": ["all", "a"], "False": ["selected", "s"]}) == "True"
-    print("\n  -- processing -- please wait --")
+    print("\n  -- processing --")
     return tort, img, all_or_selected
 
 
@@ -53,7 +53,7 @@ def atom_distance(x1, y1, z1, x2, y2, z2):
     return math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
 
 
-def visualisation(geom, filename, Manual=False):
+def visualisation(geom, filename):
     # function to calculate distance between two atoms
     with io.StringIO(geom) as f:
         data = [line.split() for line in f]
@@ -93,21 +93,15 @@ def visualisation(geom, filename, Manual=False):
     fig.add_annotation(x=0.5, y=0.9, text=filename, showarrow=False,
                        font=dict(family="Arial", size=30, color="black"))
 
-    if not Manual:
-        img_data = pio.to_image(fig, format='png', width=1000, height=1000)
-        logging.info(f"The image of {filename} Exported")
-        return (img_data)
-    else:
-        fig.show()
-        logging.info(f"The image of {filename} was shown")
-        input("Press Enter to continue: ")
+    img_data = pio.to_image(fig, format='png', width=1000, height=1000)
+    logging.info(f"  Processing image :  {filename}")
+    return (img_data)
 
 
 def export_relevant(log_file):
     global error_rate
     try:
         frq_header, ngeom = None, ""
-        logging.info(f"Processing file {log_file}")
 
         with open(log_file, 'r') as imported_file:
             content = imported_file.read()
@@ -116,7 +110,7 @@ def export_relevant(log_file):
             if "freq" in "".join(j.strip() for j in i.group(0)).lower():
                 frq_header = i.group(1).replace("\n ", "")
                 frq_header_pos = i.span()
-                
+
         end_frq_pos = (re.search(r'Normal termination', content[frq_header_pos[1]:]).span()[1] + frq_header_pos[1])
         frq_calc = content[frq_header_pos[0]:end_frq_pos]
         thermochem = " " + re.search(r'(Zero-point correction= .*?\n) \n', frq_calc, re.DOTALL).group(1)
@@ -124,6 +118,7 @@ def export_relevant(log_file):
         for i in geom.splitlines():
             num, atom, atype, x, y, z = i.split()
             ngeom = ngeom + " ".join([atom, x, y, z]) + "\n"
+        logging.info(f"  Processing file  :  {log_file}")
 
         if text_or_table:
             charge, mult = int(
@@ -145,7 +140,7 @@ def export_relevant(log_file):
             outstr = "\n\n".join([log_file, frq_header, thermochem, lowfrqs, chrgandmult, geomheader, ngeom])
             return outstr, ngeom
     except:
-        logging.error(f"Critical failure when processing {log_file}")
+        logging.error(f" Critical failure :  {log_file}")
         outstr = "\n\n".join([log_file, "This file encountered an Error", "", "", "", "", ""])
         error_rate = error_rate + 1
         if text_or_table:
@@ -171,21 +166,19 @@ if __name__ == "__main__":
                 log_files.append(file)
             elif tot_input not in ["no", "n"]:
                 log_files.append(file)
-                logging.error("This was not a valid choice!!! The file will be processed.")
+                logging.error(" This was not a valid choice!!! The file will be processed.")
     else:
         log_files = pre_log_files
 
-    print("")
-    logging.info(f"This program will export data to {export_file}\n{os.getcwd()}")
+    print(f"\n{os.getcwd()}/{export_file}\n")
 
     datarows = []
     image_data = []
 
     if not log_files:
-        logging.error(f"{os.getcwd()} does not contain any .log files, nothing to do, Quitting now.")
+        logging.error(f"  {os.getcwd()} does not contain any .log files,  Quitting now.")
         quit()
 
-    logging.info(f"Exporting data to ./{export_file}")
     if text_or_table:
         wb = Workbook()
         ws = wb.active
@@ -195,13 +188,11 @@ if __name__ == "__main__":
                   "H-298k (Hartree)", "H-298k / rel (kJ/mol)",
                   "G-298k (Hartree)", "G-298k / rel (kJ/mol)"]
         ws.append(header)
-
         
         dataset = [export_relevant(i) for i in log_files]
         Energs = [0 if not i else i[4] for i in dataset]
         smallest = Energs.index(min(Energs))
         
-
         for i, data in enumerate(dataset):
             log_file = log_files[i].replace(".log", "")
             if not data:
@@ -220,24 +211,21 @@ if __name__ == "__main__":
                             G298rel])
             datax = datarows
             
-
-        for i in range(len(datax)):
-            ws.append(datax[i])
-            img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
-            img.width = 100
-            img.height = 100
-            img.anchor = ws.cell(
-                row=ws.max_row, column=len(header) + 1).coordinate
-            ws.column_dimensions[ws.cell(
-                row=ws.max_row,
-                column=ws.max_column).column_letter].width = 10
-            ws.row_dimensions[ws.max_row].height = 80
-            ws.add_image(img)
+        if images:
+            for i in range(len(datax)):
+                ws.append(datax[i])
+                img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
+                img.width = 100
+                img.height = 100
+                img.anchor = ws.cell(
+                    row=ws.max_row, column=len(header) + 1).coordinate
+                ws.column_dimensions[ws.cell(
+                    row=ws.max_row,
+                    column=ws.max_column).column_letter].width = 10
+                ws.row_dimensions[ws.max_row].height = 80
+                ws.add_image(img)
 
         wb.save(export_file)
-        print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
-        logging.info("Normal termination")
-        quit()
 
     else:
         doc = docx.Document()
@@ -269,6 +257,7 @@ if __name__ == "__main__":
                     doc.add_paragraph(line)
                 doc.add_page_break()
             doc.save(export_file)
-            print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
-            logging.info("Normal termination")
-            quit()
+            
+print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")          
+logging.info("  Normal termination")
+quit()
