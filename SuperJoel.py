@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SuperJoel is a program which extracts certain data from .log files
+# SuperJoel is a program which extracts certain data from Gaussian .log files
 import os
 import logging
 import re
@@ -12,9 +12,10 @@ from openpyxl import Workbook
 import docx  # pip
 from docx.shared import *
 
-logging.basicConfig(level=logging.INFO)
-__version__ = 1.0
+logging.basicConfig(level=logging.ERROR)
+__version__ = "1.2 / 24.08.2023"
 Hartree_to_kJ = 2625.4996394799
+error_rate = 0
 
 
 def do_not_overwrite(path):
@@ -26,27 +27,26 @@ def do_not_overwrite(path):
     return path
 
 
+def get_input(prompt, options):
+    while True:
+        choice = input(prompt).lower()
+        for opt, aliases in options.items():
+            if choice in aliases:
+                return opt
+        logging.error("Select a valid option !!!")
+
+
 def input_prompt():
-    def get_input(prompt, options):
-        while True:
-            choice = input(prompt).lower()
-            for opt, aliases in options.items():
-                if choice in aliases:
-                    return opt
-            logging.error("Select a valid option !!!")
+    print(f"\n  -- SuperJoel {__version__} by Jonáš Schröder --\n")
 
-    verstr = f"SuperJoel ver. {__version__} by Jonáš Schröder"
-    print(verstr + "\n" + "-" * len(verstr))
-
-    tort = get_input("Do you want an Excel or a Docs file? [Excel/Docs] : ",
+    tort = get_input("Output an Excel or a Docs file? [Excel/Docs] : ",
                      {"True": ["excel", "e"], "False": ["docs", "d"]}) == "True"
-    img = get_input("Do you want images in your file? [Yes/No] : ",
+    img = get_input("Incorporate images within the file? [Yes/No] : ",
                     {"True": ["yes", "y"], "False": ["no", "n"]}) == "True"
-    autoimg = get_input("Do you want to automatically or manually? (Auto may be badly rotated) [Auto/Manual] : ",
-                        {"True": ["auto", "a"], "False": ["manual", "m"]}) == "True" if img else False
-    all_or_selected = get_input("All or only selected .log files : [All/Selected] : ",
+    all_or_selected = get_input("Process all or only selected files : [All/Selected] : ",
                                 {"True": ["all", "a"], "False": ["selected", "s"]}) == "True"
-    return tort, img, autoimg, all_or_selected
+    print("\n  -- processing -- please wait --")
+    return tort, img, all_or_selected
 
 
 def atom_distance(x1, y1, z1, x2, y2, z2):
@@ -104,64 +104,75 @@ def visualisation(geom, filename, Manual=False):
 
 
 def export_relevant(log_file):
-    frq_header, ngeom = None, ""
-    logging.info(f"Processing file {log_file}")
+    global error_rate
+    try:
+        frq_header, ngeom = None, ""
+        logging.info(f"Processing file {log_file}")
 
-    with open(log_file, 'r') as imported_file:
-        content = imported_file.read()
+        with open(log_file, 'r') as imported_file:
+            content = imported_file.read()
 
-    for i in re.finditer(r'---*\n (#.*?)---*', content, re.DOTALL):
-        if "freq" in "".join(j.strip() for j in i.group(0)).lower():
-            frq_header = i.group(1).replace("\n ", "")
-            frq_header_pos = i.span()
+        for i in re.finditer(r'---*\n (#.*?)---*', content, re.DOTALL):
+            if "freq" in "".join(j.strip() for j in i.group(0)).lower():
+                frq_header = i.group(1).replace("\n ", "")
+                frq_header_pos = i.span()
 
-    if not frq_header:
-        logging.error("File {} does not contain frequencies. Skipping ..."
-                      .format(log_file))
+        """if not frq_header:
+            logging.error("File {} does not contain frequencies. Skipping ..."
+                        .format(log_file))
+            if text_or_table:
+                return None
+            else:
+                outstr = ("File \"{}\" skipped. \n"
+                        "No frequency calculation Found!!!"
+                        .format(log_file))
+                return outstr, None"""
+
+        end_frq_pos = (re.search(r'Normal termination', content[frq_header_pos[1]:]).span()[1] + frq_header_pos[1])
+        frq_calc = content[frq_header_pos[0]:end_frq_pos]
+        thermochem = " " + re.search(r'(Zero-point correction= .*?\n) \n', frq_calc, re.DOTALL).group(1)
+        geom = re.findall(r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}', frq_calc, re.DOTALL)[-1]
+        for i in geom.splitlines():
+            num, atom, atype, x, y, z = i.split()
+            ngeom = ngeom + " ".join([atom, x, y, z]) + "\n"
+
+        if text_or_table:
+            charge, mult = int(
+                re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group()), \
+                int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
+            thermochem = [val for i, val in enumerate([float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', thermochem)])
+                        if i not in (1, 2, 3, 5)]
+            imag = [float(x) for x in
+                    re.findall(r'-?\d*\.\d+|-?\d+', re.search(r'Low frequencies ---.*?\n', frq_calc).group(0))]
+            imag = "OK" if all(abs(val) < 30 for val in imag) else imag[0]
+            E_tot = thermochem[1] - thermochem[0]
+            E_ok, H_298k, G_298k = thermochem[1:]
+            return frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom
+        else:
+            chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?\n', frq_calc).group(0)
+            lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frq_calc))
+            geomheader = "Atomic  Coordinates (Angstroms)\nAtomic#  X      Y         Z"
+
+            outstr = "\n\n".join([log_file, frq_header, thermochem, lowfrqs, chrgandmult, geomheader, ngeom])
+            return outstr, ngeom
+    except:
+        logging.error(f"Critical failure when processing {log_file}")
+        outstr = "\n\n".join([log_file, "This file encountered an Error", "", "", "", "", ""])
+        error_rate = error_rate + 1
         if text_or_table:
             return None
         else:
-            outstr = ("File \"{}\" skipped. \n"
-                      "No frequency calculation Found!!!"
-                      .format(log_file))
             return outstr, None
-
-    end_frq_pos = (re.search(r'Normal termination', content[frq_header_pos[1]:]).span()[1] + frq_header_pos[1])
-    frq_calc = content[frq_header_pos[0]:end_frq_pos]
-    thermochem = " " + re.search(r'(Zero-point correction= .*?\n) \n', frq_calc, re.DOTALL).group(1)
-    geom = re.findall(r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}', frq_calc, re.DOTALL)[-1]
-    for i in geom.splitlines():
-        num, atom, atype, x, y, z = i.split()
-        ngeom = ngeom + " ".join([atom, x, y, z]) + "\n"
-
-    if text_or_table:
-        charge, mult = int(
-            re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group()), \
-            int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
-        thermochem = [val for i, val in enumerate([float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', thermochem)])
-                      if i not in (1, 2, 3, 5)]
-        imag = [float(x) for x in
-                re.findall(r'-?\d*\.\d+|-?\d+', re.search(r'Low frequencies ---.*?\n', frq_calc).group(0))]
-        imag = "OK" if all(abs(val) < 30 for val in imag) else imag[0]
-        E_tot = thermochem[1] - thermochem[0]
-        E_ok, H_298k, G_298k = thermochem[1:]
-        return frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom
-    else:
-        chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?\n', frq_calc).group(0)
-        lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frq_calc))
-        geomheader = "Atomic  Coordinates (Angstroms)\nAtomic#  X      Y         Z"
-
-        outstr = "\n\n".join([log_file, frq_header, thermochem, lowfrqs, chrgandmult, geomheader, ngeom])
-        return outstr, ngeom
 
 
 if __name__ == "__main__":
-    text_or_table, images, autoimg, all_or_selected = input_prompt()
+    text_or_table, images, all_or_selected = input_prompt()
     export_file = "SuperJoel Excel Output.xlsx" if text_or_table else "SuperJoel Word Output.docx"
     export_file = do_not_overwrite(export_file)
 
     pre_log_files = [f for f in os.listdir() if f.endswith('.log')]
     log_files = []
+    log_file_number = sum(1 for file in os.listdir() if file.endswith('.log'))
 
     if not all_or_selected:
         print(f"These are all the .log files: {pre_log_files}")
@@ -196,22 +207,21 @@ if __name__ == "__main__":
                   "G-298k (Hartree)", "G-298k / rel (kJ/mol)"]
         ws.append(header)
 
+        
         dataset = [export_relevant(i) for i in log_files]
         Energs = [0 if not i else i[4] for i in dataset]
         smallest = Energs.index(min(Energs))
+        
 
         for i, data in enumerate(dataset):
             log_file = log_files[i].replace(".log", "")
             if not data:
-                ws.append([log_file, 'This file contains no frequencies!!!'])
+                ws.append([log_file, 'This file encountered an Error'])
                 continue
             frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
             if geom:
                 if images:
-                    if not autoimg:
-                        visualisation(geom, log_file, True)
-                    else:
-                        image_data.append(visualisation(geom, log_file))
+                    image_data.append(visualisation(geom, log_file))
 
             Etotrel, Eokrel, H298rel, G298rel = [round(
                 abs(dataset[smallest][i] - data[i]) * Hartree_to_kJ, 1)
@@ -220,23 +230,24 @@ if __name__ == "__main__":
                             Etotrel, E_ok, Eokrel, H_298k, H298rel, G_298k,
                             G298rel])
             datax = datarows
+            
 
         for i in range(len(datax)):
             ws.append(datax[i])
-            if autoimg:
-                img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
-                img.width = 100
-                img.height = 100
-                img.anchor = ws.cell(
-                    row=ws.max_row, column=len(header) + 1).coordinate
-                ws.column_dimensions[ws.cell(
-                    row=ws.max_row,
-                    column=ws.max_column).column_letter].width = 10
-                ws.row_dimensions[ws.max_row].height = 80
-                ws.add_image(img)
+            img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
+            img.width = 100
+            img.height = 100
+            img.anchor = ws.cell(
+                row=ws.max_row, column=len(header) + 1).coordinate
+            ws.column_dimensions[ws.cell(
+                row=ws.max_row,
+                column=ws.max_column).column_letter].width = 10
+            ws.row_dimensions[ws.max_row].height = 80
+            ws.add_image(img)
 
         wb.save(export_file)
-        logging.info("Export finished. Normal termination")
+        print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
+        logging.info("Normal termination")
         quit()
 
     else:
@@ -255,13 +266,10 @@ if __name__ == "__main__":
                 outstr, geom = export_relevant(log_file)
                 if geom:
                     if images:
-                        if not autoimg:
-                            visualisation(geom, log_file, True)
-                        else:
-                            imgdata = visualisation(geom, log_file)
-                            picture = doc.add_picture(io.BytesIO(imgdata))
-                            picture.height = docx.shared.Mm(140)
-                            picture.width = docx.shared.Mm(140)
+                        imgdata = visualisation(geom, log_file)
+                        picture = doc.add_picture(io.BytesIO(imgdata))
+                        picture.height = docx.shared.Mm(140)
+                        picture.width = docx.shared.Mm(140)
                 lines = outstr.split("\n")
                 first_line = lines[0]
                 paragraph = doc.add_paragraph(first_line)
@@ -272,5 +280,6 @@ if __name__ == "__main__":
                     doc.add_paragraph(line)
                 doc.add_page_break()
             doc.save(export_file)
-            logging.info("Export finished. Normal termination")
+            print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
+            logging.info("Normal termination")
             quit()
