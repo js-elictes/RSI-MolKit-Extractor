@@ -9,11 +9,11 @@ import plotly.io as pio
 import io
 import openpyxl
 from openpyxl import Workbook
-import docx  # pip
+import docx
 from docx.shared import *
 
 logging.basicConfig(level=logging.INFO)
-__version__ = "1.2 / 24.08.2023"
+__version__ = "1.3 / 24.08.2023"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 
@@ -166,40 +166,43 @@ def create_excel_output(log_files, images):
                 "G-298k (Hartree)", "G-298k / rel (kJ/mol)"]
     ws.append(header)
     
-    dataset = [export_relevant(i) for i in log_files]
-    Energs = [0 if not i else i[4] for i in dataset]
-    smallest = Energs.index(min(Energs))
-    
-    for i, data in enumerate(dataset):
-        log_file = log_files[i].replace(".log", "")
-        if not data:
-            ws.append([log_file, 'This file encountered an Error'])
-            continue
-        frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
-        if geom:
-            if images:
-                image_data.append(visualisation(geom, log_file))
+    try:
+        dataset = [export_relevant(i) for i in log_files]
+        Energs = [0 if not i else i[4] for i in dataset]
+        smallest = Energs.index(min(Energs))
 
-        Etotrel, Eokrel, H298rel, G298rel = [round(
-            abs(dataset[smallest][i] - data[i]) * Hartree_to_kJ, 1)
-            for i in range(4, 8)]
-        datarows.append([log_file, frqheader, charge, mult, imag, E_tot,
-                        Etotrel, E_ok, Eokrel, H_298k, H298rel, G_298k,
-                        G298rel])
-        
-    if images:
-        for i in range(len(datarows)):
-            ws.append(datarows[i])
-            img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
-            img.width = 100
-            img.height = 100
-            img.anchor = ws.cell(
-                row=ws.max_row, column=len(header) + 1).coordinate
-            ws.column_dimensions[ws.cell(
-                row=ws.max_row,
-                column=ws.max_column).column_letter].width = 10
-            ws.row_dimensions[ws.max_row].height = 80
-            ws.add_image(img)
+        for i, data in enumerate(dataset):
+            log_file = log_files[i].replace(".log", "")
+            if not data:
+                ws.append([log_file, 'This file encountered an Error'])
+                continue
+            frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
+            if geom:
+                if images:
+                    image_data.append(visualisation(geom, log_file))
+
+            Etotrel, Eokrel, H298rel, G298rel = [round(
+                abs(dataset[smallest][i] - data[i]) * Hartree_to_kJ, 1)
+                for i in range(4, 8)]
+            datarows.append([log_file, frqheader, charge, mult, imag, E_tot,
+                            Etotrel, E_ok, Eokrel, H_298k, H298rel, G_298k,
+                            G298rel])
+            
+        if images:
+            for i in range(len(datarows)):
+                ws.append(datarows[i])
+                img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
+                img.width = 100
+                img.height = 100
+                img.anchor = ws.cell(
+                    row=ws.max_row, column=len(header) + 1).coordinate
+                ws.column_dimensions[ws.cell(
+                    row=ws.max_row,
+                    column=ws.max_column).column_letter].width = 10
+                ws.row_dimensions[ws.max_row].height = 80
+                ws.add_image(img)
+    except:
+        pass
     return wb
 
 
@@ -251,6 +254,11 @@ if __name__ == "__main__":
     else:
         doc = create_word_output(log_files, images)
         doc.save(export_file)
-
+    
     print(f"\n  -- Finished -- {error_rate} out of {log_file_number} encountered an Error --\n")
+    print("""             __..--''``---....___   _..._    __
+   /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
+  ///_.-' _..--.'_    \                    `( ) ) // //
+  / (_..-' // (< _     ;_..__               ; `' / ///
+   / // // //  `-._,_)' // / ``--...____..-' /// / //\n""")
     quit()
