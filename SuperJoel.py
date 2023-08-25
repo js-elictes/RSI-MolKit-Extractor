@@ -12,8 +12,12 @@ from openpyxl import Workbook
 import docx
 from docx.shared import *
 
+#  Configure logging
 logging.basicConfig(level=logging.INFO)
-__version__ = "1.3 / 25.08.2023"
+
+
+# Constants
+__version__ = "1.4 / 25.08.2023"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 
@@ -35,7 +39,7 @@ def get_input(prompt, options):
         for opt, aliases in options.items():
             if choice in aliases:
                 return opt
-        logging.error("Select a valid option !!!")
+        logging.error(" -Select a valid option-")
 
 
 # Prompts the user for output preferences (Excel or Docs) and image incorporation.
