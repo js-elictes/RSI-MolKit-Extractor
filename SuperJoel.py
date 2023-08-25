@@ -13,7 +13,7 @@ import docx
 from docx.shared import *
 
 logging.basicConfig(level=logging.INFO)
-__version__ = "1.3 / 24.08.2023"
+__version__ = "1.3 / 25.08.2023"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 
@@ -188,9 +188,9 @@ def create_excel_output(log_files, images):
                             Etotrel, E_ok, Eokrel, H_298k, H298rel, G_298k,
                             G298rel])
             
-        if images:
-            for i in range(len(datarows)):
-                ws.append(datarows[i])
+        for i in range(len(datarows)):
+            ws.append(datarows[i])
+            if images:
                 img = openpyxl.drawing.image.Image(io.BytesIO(image_data[i]))
                 img.width = 100
                 img.height = 100
