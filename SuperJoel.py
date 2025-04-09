@@ -11,23 +11,7 @@ from docx.shared import Cm, Pt
 __version__ = "1.6 -- 09.04.2025"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
-logging.basicConfig(level=logging.INFO)  # Configure Terminal Info
-
-# Basic periodic table for converting atomic numbers to symbols (extend as needed)
-atomic_symbols = {
-    1: 'H',    2: 'He',   3: 'Li',   4: 'Be',   5: 'B',    6: 'C',    7: 'N',    8: 'O',    9: 'F',   10: 'Ne',
-   11: 'Na',  12: 'Mg',  13: 'Al',  14: 'Si',  15: 'P',   16: 'S',   17: 'Cl',  18: 'Ar',  19: 'K',   20: 'Ca',
-   21: 'Sc',  22: 'Ti',  23: 'V',   24: 'Cr',  25: 'Mn',  26: 'Fe',  27: 'Co',  28: 'Ni',  29: 'Cu',  30: 'Zn',
-   31: 'Ga',  32: 'Ge',  33: 'As',  34: 'Se',  35: 'Br',  36: 'Kr',  37: 'Rb',  38: 'Sr',  39: 'Y',   40: 'Zr',
-   41: 'Nb',  42: 'Mo',  43: 'Tc',  44: 'Ru',  45: 'Rh',  46: 'Pd',  47: 'Ag',  48: 'Cd',  49: 'In',  50: 'Sn',
-   51: 'Sb',  52: 'Te',  53: 'I',   54: 'Xe',  55: 'Cs',  56: 'Ba',  57: 'La',  58: 'Ce',  59: 'Pr',  60: 'Nd',
-   61: 'Pm',  62: 'Sm',  63: 'Eu',  64: 'Gd',  65: 'Tb',  66: 'Dy',  67: 'Ho',  68: 'Er',  69: 'Tm',  70: 'Yb',
-   71: 'Lu',  72: 'Hf',  73: 'Ta',  74: 'W',   75: 'Re',  76: 'Os',  77: 'Ir',  78: 'Pt',  79: 'Au',  80: 'Hg',
-   81: 'Tl',  82: 'Pb',  83: 'Bi',  84: 'Po',  85: 'At',  86: 'Rn',  87: 'Fr',  88: 'Ra',  89: 'Ac',  90: 'Th',
-   91: 'Pa',  92: 'U',   93: 'Np',  94: 'Pu',  95: 'Am',  96: 'Cm',  97: 'Bk',  98: 'Cf',  99: 'Es', 100: 'Fm',
-  101: 'Md', 102: 'No', 103: 'Lr', 104: 'Rf', 105: 'Db', 106: 'Sg', 107: 'Bh', 108: 'Hs', 109: 'Mt', 110: 'Ds',
-  111: 'Rg', 112: 'Cn', 113: 'Nh', 114: 'Fl', 115: 'Mc', 116: 'Lv', 117: 'Ts', 118: 'Og'
-}
+logging.basicConfig(level=logging.INFO)
 
 
 def do_not_overwrite(path):
@@ -55,7 +39,6 @@ def input_prompt():
                         "docs": "docs", "d": "docs",
                         "xyz": "xyz", "x": "xyz"})
     print("\n  -- processing -- \n")
-    # table_output is True for Excel, False for Docs and XYZ.
     table_output = True if option == "excel" else False
     return option, table_output
 
@@ -79,7 +62,7 @@ def export_relevant(log_file, table_output):
         for i in geom.splitlines():
             num, atom, atype, x, y, z = i.split()
             ngeom = ngeom + " ".join([atom, " ", x, " ", y, " ", z]) + "\n"
-        logging.info(f"✅ Processing file  :  {log_file}")
+        logging.info(f" Processing file  :  {log_file}")
         if table_output:
             charge = int(re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group())
             mult = int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
@@ -87,20 +70,19 @@ def export_relevant(log_file, table_output):
             thermochem_vals = [val for i, val in enumerate(thermochem_vals) if i not in (1, 2, 3, 5)]
             imag_values = [float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', 
                               re.search(r'Low frequencies ---.*?\n', frq_calc).group(0))]
-            imag = "OK" if all(abs(val) < 30 for val in imag_values) else imag_values[0]
+            imag = "0" if all(abs(val) < 30 for val in imag_values) else imag_values[0]
             E_tot = thermochem_vals[1] - thermochem_vals[0]
             E_ok, H_298k, G_298k = thermochem_vals[1:]
             return frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom
         else:
-            chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?\n', frq_calc).group(0)
+            chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?', frq_calc).group(0)
             lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frq_calc))
-            geomheader = "Atomic  Coordinates (Angstroms)\nAtomic#  X            Y                Z"
-            outstr = "\n\n".join([log_file, frq_header, thermochem, lowfrqs, chrgandmult, geomheader, ngeom])
+            outstr = "\n\n".join([log_file, frq_header, chrgandmult, thermochem, lowfrqs])
             return outstr, ngeom
     except Exception as e:
-        logging.error(f"⚠️ Critical failure :  {log_file}")
+        logging.error(f" Critical failure :  {log_file}")
         error_rate += 1
-        outstr = "\n\n".join([log_file, "This file encountered an Error", "", "", "", "", ""])
+        outstr = "\n\n".join([log_file, "⚠️ This file encountered an Error\n"])
         if table_output:
             return None
         else:
@@ -124,7 +106,7 @@ def create_excel_output(log_files, table_output):
     for idx, data in enumerate(dataset):
         log_file = log_files[idx].replace(".log", "")
         if not data:
-            ws.append([log_file, 'This file encountered an Error'])
+            ws.append([log_file, '⚠️ This file encountered an Error'])
             continue
         frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
         Etotrel, Eokrel, H298rel, G298rel = [
@@ -155,7 +137,7 @@ def create_word_output(log_files, table_output):
         run.bold, run.font.size = True, Pt(14)
         for line in lines[1:]:
             doc.add_paragraph(line)
-        doc.add_page_break()
+        doc.add_paragraph("")
     return doc
 
 
@@ -186,27 +168,25 @@ def create_xyz_output(log_files):
     for log_file in log_files:
         data = export_relevant(log_file, True)
         if not data:
-            logging.error(f"⚠️ Skipping {log_file}: export_relevant did not extract data.")
+            logging.error(f" Skipping {log_file}: export_relevant did not extract data.")
             continue
         try:
             frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
         except Exception as e:
-            logging.error(f"⚠️ Skipping {log_file}: error unpacking extraction data.")
+            logging.error(f" Skipping {log_file}: error unpacking extraction data.")
             continue
         coord_lines = [line for line in ngeom.splitlines() if line.strip() != ""]
         if not coord_lines:
-            logging.error(f"⚠️ Skipping {log_file}: no coordinate lines found in export_relevant output.")
+            logging.error(f" Skipping {log_file}: no coordinate lines found in export_relevant output.")
             continue
         try:
-            comment = f"{log_file} | Ehf={E_ok:.6f} | E0k={E_tot:.6f} | Imag={imag}"
+            comment = f"{log_file} | E(HF)={E_tot:.6f} | E(0K)={E_ok:.6f} | Imag={imag} | Charge={charge} | Multiplicity={mult}"
         except Exception as e:
             comment = f"{log_file} | Imag={imag}"
-            logging.warning(f"⚠️ Energy values missing or invalid in {log_file}.")
+            logging.warning(f" Energy values missing or invalid in {log_file}.")
         merged_geometries.append({'source': log_file, 'atoms': coord_lines, 'comment': comment})
     if not merged_geometries:
         return None
-
-    # Build merged string in XYZ format.
     merged_string = ""
     for geom in merged_geometries:
         count = len(geom['atoms'])
@@ -221,22 +201,22 @@ if __name__ == "__main__":
     option, table_output = input_prompt()
     log_files = [f for f in os.listdir() if f.endswith('.log')]
     if option == "excel":
-        export_file = do_not_overwrite("SuperJoel Excel Output.xlsx")
+        export_file = do_not_overwrite("SuperJoel_Excel_Output.xlsx")
         create_excel_output(log_files, table_output).save(export_file)
         print(f"\n Excel file created: {os.path.abspath(export_file)}")
     elif option == "docs":
-        export_file = do_not_overwrite("SuperJoel Word Output.docx")
+        export_file = do_not_overwrite("SuperJoel_Word_Output.docx")
         create_word_output(log_files, table_output).save(export_file)
         print(f"\n Word file created: {os.path.abspath(export_file)}")
     elif option == "xyz":
-        export_file = do_not_overwrite("SuperJoel XYZ Output.xyz")
+        export_file = do_not_overwrite("SuperJoel_XYZ_Output.xyz")
         merged_xyz = create_xyz_output(log_files)
         if merged_xyz is not None:
             with open(export_file, "w") as f:
                 f.write(merged_xyz)
             print(f"\n XYZ file created: {os.path.abspath(export_file)}")
         else:
-            print("⚠️ No geometries extracted!")
+            print(" No geometries extracted!")
     print(f"\n  -- Finished -- {error_rate} out of {len(log_files)} files encountered an Error --\n")
     print(r"""             __..--''``---....___   _..._    __
    /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
