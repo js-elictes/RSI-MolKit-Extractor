@@ -3,33 +3,43 @@
 import os
 import logging
 import re
-import numpy as np
-from scipy.spatial.distance import cdist
-import plotly.graph_objects as go
-import plotly.io as pio
-import io
-import openpyxl
 from openpyxl import Workbook
 import docx
-from docx.shared import Cm, Pt, Mm
-
+from docx.shared import Cm, Pt
 
 # Constants and logging
-__version__ = "1.5 -- 03.10.2024"
+__version__ = "1.6 -- 09.04.2025"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
-logging.basicConfig(level=logging.INFO) # Configure Terminal Info
+logging.basicConfig(level=logging.INFO)  # Configure Terminal Info
+
+# Basic periodic table for converting atomic numbers to symbols (extend as needed)
+atomic_symbols = {
+    1: 'H',    2: 'He',   3: 'Li',   4: 'Be',   5: 'B',    6: 'C',    7: 'N',    8: 'O',    9: 'F',   10: 'Ne',
+   11: 'Na',  12: 'Mg',  13: 'Al',  14: 'Si',  15: 'P',   16: 'S',   17: 'Cl',  18: 'Ar',  19: 'K',   20: 'Ca',
+   21: 'Sc',  22: 'Ti',  23: 'V',   24: 'Cr',  25: 'Mn',  26: 'Fe',  27: 'Co',  28: 'Ni',  29: 'Cu',  30: 'Zn',
+   31: 'Ga',  32: 'Ge',  33: 'As',  34: 'Se',  35: 'Br',  36: 'Kr',  37: 'Rb',  38: 'Sr',  39: 'Y',   40: 'Zr',
+   41: 'Nb',  42: 'Mo',  43: 'Tc',  44: 'Ru',  45: 'Rh',  46: 'Pd',  47: 'Ag',  48: 'Cd',  49: 'In',  50: 'Sn',
+   51: 'Sb',  52: 'Te',  53: 'I',   54: 'Xe',  55: 'Cs',  56: 'Ba',  57: 'La',  58: 'Ce',  59: 'Pr',  60: 'Nd',
+   61: 'Pm',  62: 'Sm',  63: 'Eu',  64: 'Gd',  65: 'Tb',  66: 'Dy',  67: 'Ho',  68: 'Er',  69: 'Tm',  70: 'Yb',
+   71: 'Lu',  72: 'Hf',  73: 'Ta',  74: 'W',   75: 'Re',  76: 'Os',  77: 'Ir',  78: 'Pt',  79: 'Au',  80: 'Hg',
+   81: 'Tl',  82: 'Pb',  83: 'Bi',  84: 'Po',  85: 'At',  86: 'Rn',  87: 'Fr',  88: 'Ra',  89: 'Ac',  90: 'Th',
+   91: 'Pa',  92: 'U',   93: 'Np',  94: 'Pu',  95: 'Am',  96: 'Cm',  97: 'Bk',  98: 'Cf',  99: 'Es', 100: 'Fm',
+  101: 'Md', 102: 'No', 103: 'Lr', 104: 'Rf', 105: 'Db', 106: 'Sg', 107: 'Bh', 108: 'Hs', 109: 'Mt', 110: 'Ds',
+  111: 'Rg', 112: 'Cn', 113: 'Nh', 114: 'Fl', 115: 'Mc', 116: 'Lv', 117: 'Ts', 118: 'Og'
+}
 
 
 def do_not_overwrite(path):
-    """Appends a counter to a filename to avoid overwriting existing files."""
-    n, e = os.path.splitext(path); i = 1
-    while os.path.exists(path): path = f"{n} ({i}){e}"; i += 1
+    n, e = os.path.splitext(path)
+    i = 1
+    while os.path.exists(path):
+        path = f"{n} ({i}){e}"
+        i += 1
     return path
 
 
 def get_input(prompt, options):
-    """Takes user input and matches it against a dictionary of options."""
     while True:
         choice = input(prompt).lower()
         if choice in options:
@@ -38,45 +48,20 @@ def get_input(prompt, options):
 
 
 def input_prompt():
-    """Prompts the user for output preferences and image incorporation."""
+    # Prompts the user for output preferences (Excel, Docs, or XYZ).
     print(f"\n  -- SuperJoel {__version__} by Jonáš Schröder --\n")
-    word_or_excel = get_input("Output an Excel or a Docs file? [Excel/Docs] : ",
-                              {"excel": True, "e": True, "docs": False, "d": False})
-    image = get_input("Incorporate images within the file? [Yes/No] : ",
-                      {"yes": True, "y": True, "no": False, "n": False})
-    print("\n  -- processing --")
-    return word_or_excel, image
+    option = get_input("Output an Excel, Docs, or XYZ file? [Excel/Docs/XYZ] : ",
+                       {"excel": "excel", "e": "excel",
+                        "docs": "docs", "d": "docs",
+                        "xyz": "xyz", "x": "xyz"})
+    print("\n  -- processing -- \n")
+    # table_output is True for Excel, False for Docs and XYZ.
+    table_output = True if option == "excel" else False
+    return option, table_output
 
 
-def visualisation(geom, filename):
-    """Generates a 3D visualization of atomic coordinates."""
-    data = np.loadtxt(io.StringIO(geom))
-    atom_type, coordinates = data[:, 0].astype(int), data[:, 1:]
-    n, dists = len(coordinates), cdist(coordinates, coordinates)
-    np.fill_diagonal(dists, np.inf)
-    i, j = np.triu_indices(n, 1)
-    dist_upper, atom_i = dists[i, j], atom_type[i]
-    mask = (dist_upper < 1.95) & ~((atom_i == 1) & (dist_upper > 0.5)) & ~((atom_i >= 18) & (dist_upper > 1.7))
-    close_pairs = [(coordinates[a], coordinates[b]) for a, b in zip(i[mask], j[mask])]
-    colors = {6: 'darkgray', 1: 'lightgray', 8: 'red', 7: 'green', 17: 'blue', 9: 'blue', 14: 'yellow',
-              11: 'pink', 19: 'pink', 3: 'pink', 55: 'pink', 21: 'gold', 72: 'gold', 35: 'blue', 53: 'blue'}
-    sizes = {k: 7 if k > 2 else 5 for k in range(1, 37)}
-    fig = go.Figure(data=[go.Scatter3d(x=[p[0][0], p[1][0]], y=[p[0][1], p[1][1]], z=[p[0][2], p[1][2]],
-                                       mode='lines', line=dict(color='black', width=2)) for p in close_pairs])
-    fig.add_trace(go.Scatter3d(x=coordinates[:, 0], y=coordinates[:, 1], z=coordinates[:, 2], mode='markers',
-                               marker=dict(size=[sizes.get(a, 9) for a in atom_type],
-                                           color=[colors.get(a, 'black') for a in atom_type],
-                                           line=dict(color='black', width=1))))
-    noax = dict(visible=False, showgrid=False, backgroundcolor='white')
-    fig.update_layout(scene=dict(xaxis=noax, yaxis=noax, zaxis=noax), showlegend=False)
-    fig.add_annotation(x=0.5, y=0.9, text=filename, showarrow=False, font=dict(family='Arial', size=30, color='black'))
-    img_data = pio.to_image(fig, format='png', width=1000, height=1000)
-    logging.info(f'  Processing image :  {filename}')
-    return img_data
-
-
-def export_relevant(log_file):
-    """Extracts relevant information from a Gaussian .log file."""
+def export_relevant(log_file, table_output):
+    # Extracts relevant information from a Gaussian .log file.
     global error_rate
     try:
         frq_header, ngeom = None, ""
@@ -86,45 +71,44 @@ def export_relevant(log_file):
             if "freq" in "".join(j.strip() for j in i.group(0)).lower():
                 frq_header = i.group(1).replace("\n ", "")
                 frq_header_pos = i.span()
-        end_frq_pos = (re.search(r'Normal termination', content[frq_header_pos[1]:]).span()[1] + frq_header_pos[1])
+        end_frq_pos = (re.search(r'Normal termination', content[frq_header_pos[1]:]).span()[1] +
+                       frq_header_pos[1])
         frq_calc = content[frq_header_pos[0]:end_frq_pos]
         thermochem = " " + re.search(r'(Zero-point correction= .*?\n) \n', frq_calc, re.DOTALL).group(1)
         geom = re.findall(r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}', frq_calc, re.DOTALL)[-1]
         for i in geom.splitlines():
             num, atom, atype, x, y, z = i.split()
-            ngeom = ngeom + " ".join([atom," ", x," ", y," ", z]) + "\n"
-        logging.info(f"  Processing file  :  {log_file}")
-        if word_or_excel:
-            charge, mult = int(
-                re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group()), \
-                int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
-            thermochem = [val for i, val in enumerate([float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', thermochem)])
-                        if i not in (1, 2, 3, 5)]
-            imag = [float(x) for x in
-                    re.findall(r'-?\d*\.\d+|-?\d+', re.search(r'Low frequencies ---.*?\n', frq_calc).group(0))]
-            imag = "OK" if all(abs(val) < 30 for val in imag) else imag[0]
-            E_tot = thermochem[1] - thermochem[0]
-            E_ok, H_298k, G_298k = thermochem[1:]
+            ngeom = ngeom + " ".join([atom, " ", x, " ", y, " ", z]) + "\n"
+        logging.info(f"✅ Processing file  :  {log_file}")
+        if table_output:
+            charge = int(re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group())
+            mult = int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
+            thermochem_vals = [float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', thermochem)]
+            thermochem_vals = [val for i, val in enumerate(thermochem_vals) if i not in (1, 2, 3, 5)]
+            imag_values = [float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', 
+                              re.search(r'Low frequencies ---.*?\n', frq_calc).group(0))]
+            imag = "OK" if all(abs(val) < 30 for val in imag_values) else imag_values[0]
+            E_tot = thermochem_vals[1] - thermochem_vals[0]
+            E_ok, H_298k, G_298k = thermochem_vals[1:]
             return frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom
         else:
             chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?\n', frq_calc).group(0)
             lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frq_calc))
             geomheader = "Atomic  Coordinates (Angstroms)\nAtomic#  X            Y                Z"
-
             outstr = "\n\n".join([log_file, frq_header, thermochem, lowfrqs, chrgandmult, geomheader, ngeom])
             return outstr, ngeom
-    except:
-        logging.error(f" Critical failure :  {log_file}")
+    except Exception as e:
+        logging.error(f"⚠️ Critical failure :  {log_file}")
+        error_rate += 1
         outstr = "\n\n".join([log_file, "This file encountered an Error", "", "", "", "", ""])
-        error_rate = error_rate + 1
-        if word_or_excel:
+        if table_output:
             return None
         else:
             return outstr, None
 
 
-def create_excel_output(log_files, images):
-    """Creates an Excel spreadsheet with extracted data and visualizations."""
+def create_excel_output(log_files, table_output):
+    # Creates an Excel spreadsheet with extracted data and visualizations.
     wb = Workbook()
     ws = wb.active
     header = [
@@ -134,7 +118,7 @@ def create_excel_output(log_files, images):
         "G-298k (Hartree)", "G-298k / rel (kJ/mol)"
     ]
     ws.append(header)
-    dataset = [export_relevant(f) for f in log_files]
+    dataset = [export_relevant(f, table_output) for f in log_files]
     Energs = [data[4] if data else float('inf') for data in dataset]
     smallest = Energs.index(min(Energs))
     for idx, data in enumerate(dataset):
@@ -152,19 +136,11 @@ def create_excel_output(log_files, images):
             E_ok, Eokrel, H_298k, H298rel, G_298k, G298rel
         ]
         ws.append(row)
-        if images and geom:
-            img_data = visualisation(geom, log_file)
-            img = openpyxl.drawing.image.Image(io.BytesIO(img_data))
-            img.width, img.height = 100, 100
-            img.anchor = ws.cell(row=ws.max_row, column=len(header) + 1).coordinate
-            ws.column_dimensions[ws.cell(row=ws.max_row, column=ws.max_column).column_letter].width = 10
-            ws.row_dimensions[ws.max_row].height = 80
-            ws.add_image(img)
     return wb
 
 
-def create_word_output(log_files, images):
-    """Creates a Word document with extracted data and visualizations."""
+def create_word_output(log_files, table_output):
+    # Creates a Word document with extracted data and visualizations
     doc = docx.Document()
     section = doc.sections[0]
     section.page_width, section.page_height = Cm(21), Cm(29.7)
@@ -172,11 +148,7 @@ def create_word_output(log_files, images):
     style.paragraph_format.space_before = style.paragraph_format.space_after = Cm(0)
     style.font.name, style.font.size = 'Arial', Pt(11)
     for log_file in log_files:
-        outstr, geom = export_relevant(log_file)
-        if geom and images:
-            imgdata = visualisation(geom, log_file)
-            pic = doc.add_picture(io.BytesIO(imgdata))
-            pic.height = pic.width = docx.shared.Mm(140)
+        outstr, geom = export_relevant(log_file, table_output)
         lines = outstr.split("\n")
         para = doc.add_paragraph(lines[0])
         run = para.runs[0]
@@ -185,18 +157,91 @@ def create_word_output(log_files, images):
             doc.add_paragraph(line)
         doc.add_page_break()
     return doc
-    
+
+
+def extract_second_last_xyz(content):
+    # Extracts the second-to-last 'Standard orientation' block using the original regex.
+    blocks = re.findall(r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}', content, re.DOTALL)
+    if len(blocks) < 2:
+        return None
+    block = blocks[-2]
+    coords = []
+    for line in block.strip().splitlines():
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+        try:
+            atomic_number = int(parts[1])
+        except:
+            continue
+        symbol = atomic_symbols.get(atomic_number, 'X')
+        x, y, z = parts[3:6]
+        coords.append((symbol, x, y, z))
+    return coords if coords else None
+
+
+def create_xyz_output(log_files):
+    #Merges the second-to-last coordinate blocks from all log files into one XYZ file.
+    merged_geometries = []
+    for log_file in log_files:
+        data = export_relevant(log_file, True)
+        if not data:
+            logging.error(f"⚠️ Skipping {log_file}: export_relevant did not extract data.")
+            continue
+        try:
+            frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
+        except Exception as e:
+            logging.error(f"⚠️ Skipping {log_file}: error unpacking extraction data.")
+            continue
+        coord_lines = [line for line in ngeom.splitlines() if line.strip() != ""]
+        if not coord_lines:
+            logging.error(f"⚠️ Skipping {log_file}: no coordinate lines found in export_relevant output.")
+            continue
+        try:
+            comment = f"{log_file} | Ehf={E_ok:.6f} | E0k={E_tot:.6f} | Imag={imag}"
+        except Exception as e:
+            comment = f"{log_file} | Imag={imag}"
+            logging.warning(f"⚠️ Energy values missing or invalid in {log_file}.")
+        merged_geometries.append({'source': log_file, 'atoms': coord_lines, 'comment': comment})
+    if not merged_geometries:
+        return None
+
+    # Build merged string in XYZ format.
+    merged_string = ""
+    for geom in merged_geometries:
+        count = len(geom['atoms'])
+        merged_string += f"{count}\n"
+        merged_string += f"{geom['comment']}\n"
+        for line in geom['atoms']:
+            merged_string += f"{line}\n"
+    return merged_string
+
 
 if __name__ == "__main__":
-    word_or_excel, images = input_prompt()
-    export_file = do_not_overwrite("SuperJoel Excel Output.xlsx" if word_or_excel else "SuperJoel Word Output.docx")
-    print(f"\n{os.path.abspath(export_file)}\n")
+    option, table_output = input_prompt()
     log_files = [f for f in os.listdir() if f.endswith('.log')]
-    (create_excel_output if word_or_excel else create_word_output)(log_files, images).save(export_file)
-    print(f"\n  -- Finished -- {error_rate} out of {len(log_files)} encountered an Error --\n")
-    print("""             __..--''``---....___   _..._    __
+    if option == "excel":
+        export_file = do_not_overwrite("SuperJoel Excel Output.xlsx")
+        create_excel_output(log_files, table_output).save(export_file)
+        print(f"\n Excel file created: {os.path.abspath(export_file)}")
+    elif option == "docs":
+        export_file = do_not_overwrite("SuperJoel Word Output.docx")
+        create_word_output(log_files, table_output).save(export_file)
+        print(f"\n Word file created: {os.path.abspath(export_file)}")
+    elif option == "xyz":
+        export_file = do_not_overwrite("SuperJoel XYZ Output.xyz")
+        merged_xyz = create_xyz_output(log_files)
+        if merged_xyz is not None:
+            with open(export_file, "w") as f:
+                f.write(merged_xyz)
+            print(f"\n XYZ file created: {os.path.abspath(export_file)}")
+        else:
+            print("⚠️ No geometries extracted!")
+    print(f"\n  -- Finished -- {error_rate} out of {len(log_files)} files encountered an Error --\n")
+    print(r"""             __..--''``---....___   _..._    __
    /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
   ///_.-' _..--.'_    \                    `( ) ) // //
   / (_..-' // (< _     ;_..__               ; `' / ///
-   / // // //  `-._,_)' // / ``--...____..-' /// / //\n""")
+   / // // //  `-._,_)' // / ``--...____..-' /// / //\
+""")
     quit()
