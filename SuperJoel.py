@@ -8,7 +8,7 @@ import docx
 from docx.shared import Cm, Pt
 
 # Constants and logging
-__version__ = "1.6 -- 09.04.2025"
+__version__ = "1.7 -- 10.04.2025"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 logging.basicConfig(level=logging.INFO)
@@ -39,12 +39,10 @@ def input_prompt():
                         "docs": "docs", "d": "docs",
                         "xyz": "xyz", "x": "xyz"})
     print("\n  -- processing -- \n")
-    table_output = True if option == "excel" else False
-    return option, table_output
+    return option
 
 
-def export_relevant(log_file, table_output):
-    # Extracts relevant information from a Gaussian .log file.
+def export_relevant(log_file, option):
     global error_rate
     try:
         frq_header, ngeom = None, ""
@@ -63,7 +61,7 @@ def export_relevant(log_file, table_output):
             num, atom, atype, x, y, z = i.split()
             ngeom = ngeom + " ".join([atom, " ", x, " ", y, " ", z]) + "\n"
         logging.info(f" Processing file  :  {log_file}")
-        if table_output:
+        if option == "variables":
             charge = int(re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group())
             mult = int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
             thermochem_vals = [float(x) for x in re.findall(r'-?\d*\.\d+|-?\d+', thermochem)]
@@ -75,22 +73,21 @@ def export_relevant(log_file, table_output):
             E_ok, H_298k, G_298k = thermochem_vals[1:]
             return frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom
         else:
-            chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?', frq_calc).group(0)
+            chrgandmult = re.search(r'Charge = .*? Multiplicity = .*?\n', frq_calc).group(0)
             lowfrqs = "".join(re.findall(r'Low frequencies ---.*?\n', frq_calc))
             outstr = "\n\n".join([log_file, frq_header, chrgandmult, thermochem, lowfrqs])
-            return outstr, ngeom
+            return outstr
     except Exception as e:
         logging.error(f" Critical failure :  {log_file}")
         error_rate += 1
         outstr = "\n\n".join([log_file, "⚠️ This file encountered an Error\n"])
-        if table_output:
+        if option == "variables":
             return None
         else:
-            return outstr, None
+            return outstr
 
 
-def create_excel_output(log_files, table_output):
-    # Creates an Excel spreadsheet with extracted data and visualizations.
+def create_excel_output(log_files):
     wb = Workbook()
     ws = wb.active
     header = [
@@ -100,7 +97,7 @@ def create_excel_output(log_files, table_output):
         "G-298k (Hartree)", "G-298k / rel (kJ/mol)"
     ]
     ws.append(header)
-    dataset = [export_relevant(f, table_output) for f in log_files]
+    dataset = [export_relevant(f, "variables") for f in log_files]
     Energs = [data[4] if data else float('inf') for data in dataset]
     smallest = Energs.index(min(Energs))
     for idx, data in enumerate(dataset):
@@ -121,8 +118,7 @@ def create_excel_output(log_files, table_output):
     return wb
 
 
-def create_word_output(log_files, table_output):
-    # Creates a Word document with extracted data and visualizations
+def create_word_output(log_files):
     doc = docx.Document()
     section = doc.sections[0]
     section.page_width, section.page_height = Cm(21), Cm(29.7)
@@ -130,8 +126,7 @@ def create_word_output(log_files, table_output):
     style.paragraph_format.space_before = style.paragraph_format.space_after = Cm(0)
     style.font.name, style.font.size = 'Arial', Pt(11)
     for log_file in log_files:
-        outstr, geom = export_relevant(log_file, table_output)
-        lines = outstr.split("\n")
+        lines = export_relevant(log_file, "string").split("\n")
         para = doc.add_paragraph(lines[0])
         run = para.runs[0]
         run.bold, run.font.size = True, Pt(14)
@@ -141,49 +136,17 @@ def create_word_output(log_files, table_output):
     return doc
 
 
-def extract_second_last_xyz(content):
-    # Extracts the second-to-last 'Standard orientation' block using the original regex.
-    blocks = re.findall(r' *Standard orientation: *\n -*\n.*?-*\n -*\n(.*?) -{10}', content, re.DOTALL)
-    if len(blocks) < 2:
-        return None
-    block = blocks[-2]
-    coords = []
-    for line in block.strip().splitlines():
-        parts = line.split()
-        if len(parts) < 6:
-            continue
-        try:
-            atomic_number = int(parts[1])
-        except:
-            continue
-        symbol = atomic_symbols.get(atomic_number, 'X')
-        x, y, z = parts[3:6]
-        coords.append((symbol, x, y, z))
-    return coords if coords else None
-
-
 def create_xyz_output(log_files):
-    #Merges the second-to-last coordinate blocks from all log files into one XYZ file.
     merged_geometries = []
     for log_file in log_files:
-        data = export_relevant(log_file, True)
+        data = export_relevant(log_file, "variables")
         if not data:
             logging.error(f" Skipping {log_file}: export_relevant did not extract data.")
             continue
-        try:
+        else:
             frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
-        except Exception as e:
-            logging.error(f" Skipping {log_file}: error unpacking extraction data.")
-            continue
         coord_lines = [line for line in ngeom.splitlines() if line.strip() != ""]
-        if not coord_lines:
-            logging.error(f" Skipping {log_file}: no coordinate lines found in export_relevant output.")
-            continue
-        try:
-            comment = f"{log_file} | E(HF)={E_tot:.6f} | E(0K)={E_ok:.6f} | Imag={imag} | Charge={charge} | Multiplicity={mult}"
-        except Exception as e:
-            comment = f"{log_file} | Imag={imag}"
-            logging.warning(f" Energy values missing or invalid in {log_file}.")
+        comment = f"{log_file} | E(HF)={E_tot:.6f} | E(0K)={E_ok:.6f} | Imag={imag} | Charge={charge} | Multiplicity={mult}"
         merged_geometries.append({'source': log_file, 'atoms': coord_lines, 'comment': comment})
     if not merged_geometries:
         return None
@@ -198,25 +161,22 @@ def create_xyz_output(log_files):
 
 
 if __name__ == "__main__":
-    option, table_output = input_prompt()
+    option = input_prompt()
     log_files = [f for f in os.listdir() if f.endswith('.log')]
     if option == "excel":
         export_file = do_not_overwrite("SuperJoel_Excel_Output.xlsx")
-        create_excel_output(log_files, table_output).save(export_file)
+        create_excel_output(log_files).save(export_file)
         print(f"\n Excel file created: {os.path.abspath(export_file)}")
     elif option == "docs":
         export_file = do_not_overwrite("SuperJoel_Word_Output.docx")
-        create_word_output(log_files, table_output).save(export_file)
+        create_word_output(log_files).save(export_file)
         print(f"\n Word file created: {os.path.abspath(export_file)}")
     elif option == "xyz":
         export_file = do_not_overwrite("SuperJoel_XYZ_Output.xyz")
-        merged_xyz = create_xyz_output(log_files)
-        if merged_xyz is not None:
-            with open(export_file, "w") as f:
-                f.write(merged_xyz)
-            print(f"\n XYZ file created: {os.path.abspath(export_file)}")
-        else:
-            print(" No geometries extracted!")
+        with open(export_file, "w") as f:
+            f.write(create_xyz_output(log_files))
+        print(f"\n XYZ file created: {os.path.abspath(export_file)}")
+        
     print(f"\n  -- Finished -- {error_rate} out of {len(log_files)} files encountered an Error --\n")
     print(r"""             __..--''``---....___   _..._    __
    /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
