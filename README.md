@@ -1,6 +1,6 @@
-# SuperJoel
+# RSI MolKit Extractor
 
-**SuperJoel** is a simple tool to extract geometries and thermodynamic data from Gaussian `.log` files, designed to quickly produce clean outputs for publications or analysis, including Excel summaries, Word documents, or `.xyz` structure files.
+**RSI MolKit Extractor** is a simple tool to extract geometries and thermodynamic data from Gaussian `.log` files, designed to quickly produce clean outputs for publications or analysis, including Excel summaries, Word documents, or `.xyz` structure files.
 
 🔗 For instant web visualization of XYZ files, use my [MíšaXYZ Viewer](https://js-elictes.github.io/MisaXYZ/)
 
@@ -32,7 +32,7 @@ No other setup needed, just clone or download the repo.
 **Example run**:
 
 ```text
--- SuperJoel 1.8, 21.06.2025 by Jonáš Schröder --
+-- RSI MolKit Extractor 1.8, 21.06.2025 by Jonáš Schröder --
 
 Output an Excel, Docs, or XYZ file? [Excel/Docs/XYZ] : excel
 
