@@ -14,16 +14,6 @@ pip install openpyxl python-docx
 
 No other setup needed, just clone or download the repo.
 
-## 🔧 Troubleshooting
-
-If you see a `ModuleNotFoundError`, run:
-
-```bash
-pip install openpyxl python-docx
-```
-
-If a file fails, check that it is a complete Gaussian output with a finished frequency job.
-
 ## 🧪 How It Works
 
 1. Put all your Gaussian `.log` files into the same folder as the script  
@@ -96,7 +86,17 @@ There is a `testfile.log` in the repo. Run the script in its folder to try it ou
 - Uses the last standard orientation for optimized coordinates  
 - Treats frequencies below 30 cm⁻¹ as non-imaginary  
 - Logs and skips files that fail to parse  
-- Saves outputs without overwriting existing files unless they are renamed  
+- Saves outputs without overwriting existing files unless they are renamed
+
+## 🔧 Troubleshooting
+
+If you see a `ModuleNotFoundError`, run:
+
+```bash
+pip install openpyxl python-docx
+```
+
+If a file fails, check that it is a complete Gaussian output with a finished frequency job.
 
 ## ☕ License
 
