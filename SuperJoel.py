@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-""" A simple program that extracts geometries and thermodynamic data of optimized Gaussian jobs. 
+""" RSI MolKit Extractor
+A simple program that extracts geometries and thermodynamic data of optimized Gaussian jobs. 
 Put all your results into one folder and generate an Excel table with all thermodynamics or an .xyz file for supplementary materials. 
 Place in the directory of your files and run. """
 
@@ -37,7 +38,7 @@ def get_input(prompt, options):
 
 def input_prompt():
     # Prompts the user for output preferences (Excel, Docs, or XYZ).
-    print(f"\n  -- SuperJoel {__version__} by Jonáš Schröder --\n")
+    print(f"\n  -- RSI MolKit Extractor {__version__} by Jonáš Schröder --\n")
     option = get_input("Output an Excel, Docs, or XYZ file? [Excel/Docs/XYZ] : ",
                        {"excel": "excel", "e": "excel",
                         "docs": "docs", "d": "docs",
@@ -167,15 +168,15 @@ if __name__ == "__main__":
     option = input_prompt()
     log_files = [f for f in os.listdir() if f.endswith('.log')]
     if option == "excel":
-        export_file = do_not_overwrite("SuperJoel_Excel_Output.xlsx")
+        export_file = do_not_overwrite("MolKit_Excel_Output.xlsx")
         create_excel_output(log_files).save(export_file)
         print(f"\n Excel file created: {os.path.abspath(export_file)}")
     elif option == "docs":
-        export_file = do_not_overwrite("SuperJoel_Word_Output.docx")
+        export_file = do_not_overwrite("MolKit_Word_Output.docx")
         create_word_output(log_files).save(export_file)
         print(f"\n Word file created: {os.path.abspath(export_file)}")
     elif option == "xyz":
-        export_file = do_not_overwrite("SuperJoel_XYZ_Output.xyz")
+        export_file = do_not_overwrite("MolKit_XYZ_Output.xyz")
         with open(export_file, "w") as f:
             f.write(create_xyz_output(log_files))
         print(f"\n XYZ file created: {os.path.abspath(export_file)}")
