@@ -96,8 +96,8 @@ def create_excel_output(log_files):
     ws = wb.active
     header = [
         "File name", "Header", "Charge", "Multiplicity", "Imag",
-        "E-tot (Hartree)", "E-tot / rel (kJ/mol)", "E-ok (Hartree)",
-        "E-ok / rel (kJ/mol)", "H-298k (Hartree)", "H-298k / rel (kJ/mol)",
+        "E-tot (Hartree)", "E-tot / rel (kJ/mol)", "E-0K (Hartree)",
+        "E-0K / rel (kJ/mol)", "H-298k (Hartree)", "H-298k / rel (kJ/mol)",
         "G-298k (Hartree)", "G-298k / rel (kJ/mol)"
     ]
     ws.append(header)
