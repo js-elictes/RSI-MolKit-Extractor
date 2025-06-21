@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-# SuperJoel is a program which extracts certain data from Gaussian .log files - Roithova Group
+
+""" A simple program that extracts geometries and thermodynamic data of optimized Gaussian jobs. 
+Put all your results into one folder and generate an Excel table with all thermodynamics or an .xyz file for supplementary materials. 
+Place in the directory of your files and run. """
+
 import os
 import logging
 import re
