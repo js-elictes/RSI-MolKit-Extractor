@@ -12,7 +12,7 @@ import docx
 from docx.shared import Cm, Pt
 
 # Constants and logging
-__version__ = "1.7 -- 10.04.2025"
+__version__ = "1.8 -- 21.06.2025"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 logging.basicConfig(level=logging.INFO)
@@ -141,26 +141,25 @@ def create_word_output(log_files):
 
 
 def create_xyz_output(log_files):
+    note = "#You can open this file using our opensource XYZ Viewer: https://js-elictes.github.io/MisaXYZ/"
     merged_geometries = []
     for log_file in log_files:
         data = export_relevant(log_file, "variables")
         if not data:
             logging.error(f" Skipping {log_file}: export_relevant did not extract data.")
             continue
-        else:
-            frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
-        coord_lines = [line for line in ngeom.splitlines() if line.strip() != ""]
+        frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
+        coord_lines = [line for line in ngeom.splitlines() if line.strip()]
         comment = f"{log_file} | E(HF)={E_tot:.6f} | E(0K)={E_ok:.6f} | Imag={imag} | Charge={charge} | Multiplicity={mult}"
-        merged_geometries.append({'source': log_file, 'atoms': coord_lines, 'comment': comment})
+        merged_geometries.append({'atoms': coord_lines, 'comment': comment})
     if not merged_geometries:
         return None
     merged_string = ""
-    for geom in merged_geometries:
-        count = len(geom['atoms'])
-        merged_string += f"{count}\n"
+    for i, geom in enumerate(merged_geometries):
+        count_line = f"{len(geom['atoms'])}{' ' + note if i == 0 else ''}\n"
+        merged_string += count_line
         merged_string += f"{geom['comment']}\n"
-        for line in geom['atoms']:
-            merged_string += f"{line}\n"
+        merged_string += "\n".join(geom['atoms']) + "\n"
     return merged_string
 
 
