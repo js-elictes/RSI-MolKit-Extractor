@@ -38,7 +38,7 @@ Output an Excel, Docs, or XYZ file? [Excel/Docs/XYZ] : excel
 
 -- processing --
 
-Excel file created: /path/to/SuperJoel_Excel_Output.xlsx
+Excel file created: /path/to/MolKit_Excel_Output.xlsx
 
 -- Finished, 0 out of 3 files encountered an error --
 ```
