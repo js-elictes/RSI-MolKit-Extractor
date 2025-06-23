@@ -10,10 +10,11 @@ import logging
 import re
 from openpyxl import Workbook
 import docx
-from docx.shared import Cm, Pt
+from docx.shared import Cm, Pt, RGBColor
+from datetime import datetime
 
 # Constants and logging
-__version__ = "1.8 -- 21.06.2025"
+__version__ = "1.9 -- 23.06.2025"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 logging.basicConfig(level=logging.INFO)
@@ -28,23 +29,18 @@ def do_not_overwrite(path):
     return path
 
 
-def get_input(prompt, options):
+def input_prompt():
+    print(f"\n  -- \033[1mRSI MolKit Extractor {__version__} by Jonáš Schröder\033[0m --")
+    options = {"excel": "excel", "e": "excel",
+               "docs": "docs", "d": "docs",
+               "xyz": "xyz", "x": "xyz",
+               "all": "all", "a": "all"}
     while True:
-        choice = input(prompt).lower()
+        choice = input("\nOutput -> [E]xcel / [D]ocs / [X]YZ / [A]ll: ").lower()
         if choice in options:
+            print("\n  -- \033[1mprocessing\033[0m -- \n")
             return options[choice]
         logging.error(" -Select a valid option-")
-
-
-def input_prompt():
-    # Prompts the user for output preferences (Excel, Docs, or XYZ).
-    print(f"\n  -- RSI MolKit Extractor {__version__} by Jonáš Schröder --\n")
-    option = get_input("Output an Excel, Docs, or XYZ file? [Excel/Docs/XYZ] : ",
-                       {"excel": "excel", "e": "excel",
-                        "docs": "docs", "d": "docs",
-                        "xyz": "xyz", "x": "xyz"})
-    print("\n  -- processing -- \n")
-    return option
 
 
 def export_relevant(log_file, option):
@@ -123,21 +119,32 @@ def create_excel_output(log_files):
     return wb
 
 
-def create_word_output(log_files):
+def create_docs_output(log_files):
     doc = docx.Document()
-    section = doc.sections[0]
-    section.page_width, section.page_height = Cm(21), Cm(29.7)
-    style = doc.styles['Normal']
-    style.paragraph_format.space_before = style.paragraph_format.space_after = Cm(0)
-    style.font.name, style.font.size = 'Arial', Pt(11)
+    doc.sections[0].page_width, doc.sections[0].page_height = Cm(21), Cm(29.7)
+    style = doc.styles["Normal"]
+    style.font.name, style.font.size = "Arial", Pt(11)
+    style.paragraph_format.space_before = 0
+    style.paragraph_format.space_after = 0
+    style.paragraph_format.line_spacing = 1.0
     for log_file in log_files:
-        lines = export_relevant(log_file, "string").split("\n")
-        para = doc.add_paragraph(lines[0])
-        run = para.runs[0]
-        run.bold, run.font.size = True, Pt(14)
-        for line in lines[1:]:
-            doc.add_paragraph(line)
-        doc.add_paragraph("")
+        raw = export_relevant(log_file, "string")
+        if not raw:
+            doc.add_paragraph(f"{log_file} ⚠️  error while parsing")
+            doc.add_paragraph(""), doc.add_paragraph("")
+            continue
+
+        blocks = [b.strip() for b in re.split(r"\n\s*\n", raw) if b.strip()]
+        header = doc.add_paragraph(blocks[0])
+        run = header.runs[0]
+        run.font.size, run.font.bold = Pt(16), True
+        run.font.color.rgb = RGBColor(0x00, 0x80, 0x81)
+
+        for line in "\n".join(blocks[1:]).splitlines():
+            if line.strip():
+                doc.add_paragraph(line.strip())
+
+        doc.add_paragraph(""), doc.add_paragraph("")
     return doc
 
 
@@ -167,20 +174,19 @@ def create_xyz_output(log_files):
 if __name__ == "__main__":
     option = input_prompt()
     log_files = [f for f in os.listdir() if f.endswith('.log')]
-    if option == "excel":
-        export_file = do_not_overwrite("MolKit_Excel_Output.xlsx")
-        create_excel_output(log_files).save(export_file)
-        print(f"\n Excel file created: {os.path.abspath(export_file)}")
-    elif option == "docs":
-        export_file = do_not_overwrite("MolKit_Word_Output.docx")
-        create_word_output(log_files).save(export_file)
-        print(f"\n Word file created: {os.path.abspath(export_file)}")
-    elif option == "xyz":
-        export_file = do_not_overwrite("MolKit_XYZ_Output.xyz")
-        with open(export_file, "w") as f:
-            f.write(create_xyz_output(log_files))
-        print(f"\n XYZ file created: {os.path.abspath(export_file)}")
-        
+    timestamp = datetime.now().strftime("%d%m%Y")
+    actions = {"excel": ("MolKit_Excel", lambda f: create_excel_output(log_files).save(f)),
+        "docs":  ("MolKit_Docs",  lambda f: create_docs_output(log_files).save(f)),
+        "xyz":   ("MolKit_XYZ",   lambda f: open(f, "w").write(create_xyz_output(log_files)))}
+    selected = actions if option == "all" else {option: actions[option]}
+    for name, (prefix, func) in selected.items():
+        ext = "docx" if name == "docs" else "xyz" if name == "xyz" else "xlsx"
+        filename = do_not_overwrite(f"{prefix}_{timestamp}.{ext}")
+        func(filename)
+        print(f"\n{ name.capitalize() } file created: {os.path.abspath(filename)}\n")
+    if option == "all":
+        error_rate = max(1, error_rate // 3)
+        print("All files created")
     print(f"\n  -- Finished -- {error_rate} out of {len(log_files)} files encountered an Error --\n")
     print(r"""             __..--''``---....___   _..._    __
    /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
