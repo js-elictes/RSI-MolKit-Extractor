@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """ RSI MolKit Extractor
 A simple program that extracts geometries and thermodynamic data of optimized Gaussian jobs. 
 Put all your results into one folder and generate an Excel table with all thermodynamics or an .xyz file for supplementary materials. 
@@ -8,13 +7,11 @@ Place in the directory of your files and run. """
 import os
 import logging
 import re
-from openpyxl import Workbook
-import docx
-from docx.shared import Cm, Pt, RGBColor
+import csv
 from datetime import datetime
 
 # Constants and logging
-__version__ = "1.9 -- 23.06.2025"
+__version__ = "2.0 -- 23.06.2025"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 logging.basicConfig(level=logging.INFO)
@@ -30,13 +27,13 @@ def do_not_overwrite(path):
 
 
 def input_prompt():
-    print(f"\n  -- \033[1mRSI MolKit Extractor {__version__} by Jonáš Schröder\033[0m --")
+    print(f"\n\033[1m  -- RSI MolKit Extractor {__version__} by Jonáš Schröder --\033[0m")
     options = {"excel": "excel", "e": "excel",
                "docs": "docs", "d": "docs",
                "xyz": "xyz", "x": "xyz",
                "all": "all", "a": "all"}
     while True:
-        choice = input("\nOutput -> [E]xcel / [D]ocs / [X]YZ / [A]ll: ").lower()
+        choice = input("\nOutput -> [E]xcel (.csv) / [D]ocs (.rtf) / [X]YZ / [A]ll: ").lower()
         if choice in options:
             print("\n  -- \033[1mprocessing\033[0m -- \n")
             return options[choice]
@@ -81,75 +78,62 @@ def export_relevant(log_file, option):
     except Exception as e:
         logging.error(f" Critical failure :  {log_file}")
         error_rate += 1
-        outstr = "\n\n".join([log_file, "⚠️ This file encountered an Error\n"])
+        outstr = "\n\n".join([log_file, "This file encountered an Error\n"])
         if option == "variables":
             return None
         else:
             return outstr
 
 
-def create_excel_output(log_files):
-    wb = Workbook()
-    ws = wb.active
-    header = [
-        "File name", "Header", "Charge", "Multiplicity", "Imag",
-        "E-tot (Hartree)", "E-tot / rel (kJ/mol)", "E-0K (Hartree)",
-        "E-0K / rel (kJ/mol)", "H-298k (Hartree)", "H-298k / rel (kJ/mol)",
-        "G-298k (Hartree)", "G-298k / rel (kJ/mol)"
-    ]
-    ws.append(header)
+def _escape_rtf(text: str) -> str:
+    return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
+
+
+def create_excel_output(log_files: list[str], out_path: str) -> None:
+    header = ["File name", "Header", "Charge", "Multiplicity", "Imag",
+              "E-tot (Hartree)", "E-tot / rel (kJ/mol)", "E-0K (Hartree)",
+              "E-0K / rel (kJ/mol)", "H-298K (Hartree)", "H-298K / rel (kJ/mol)",
+              "G-298K (Hartree)", "G-298K / rel (kJ/mol)"]
     dataset = [export_relevant(f, "variables") for f in log_files]
-    Energs = [data[4] if data else float('inf') for data in dataset]
-    smallest = Energs.index(min(Energs))
+    ref_idx  = min(range(len(dataset)),
+                   key=lambda i: dataset[i][4] if dataset[i] else float("inf"))
+    rows = []
     for idx, data in enumerate(dataset):
-        log_file = log_files[idx].replace(".log", "")
+        name = log_files[idx].removesuffix(".log")
         if not data:
-            ws.append([log_file, '⚠️ This file encountered an Error'])
+            rows.append([name, "⚠️ This file encountered an Error"])
             continue
-        frqheader, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, geom = data
-        Etotrel, Eokrel, H298rel, G298rel = [
-            round(abs(dataset[smallest][i] - data[i]) * Hartree_to_kJ, 1)
-            for i in range(4, 8)
-        ]
-        row = [
-            log_file, frqheader, charge, mult, imag, E_tot, Etotrel,
-            E_ok, Eokrel, H_298k, H298rel, G_298k, G298rel
-        ]
-        ws.append(row)
-    return wb
+        frq, chg, mul, imag, Et, E0, H, G, _ = data
+        rel = [round(abs(dataset[ref_idx][i] - data[i]) * Hartree_to_kJ, 1)
+               for i in range(4, 8)]
+        rows.append([name, frq, chg, mul, imag,
+                     Et, rel[0], E0, rel[1], H, rel[2], G, rel[3]])
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
 
 
-def create_docs_output(log_files):
-    doc = docx.Document()
-    doc.sections[0].page_width, doc.sections[0].page_height = Cm(21), Cm(29.7)
-    style = doc.styles["Normal"]
-    style.font.name, style.font.size = "Arial", Pt(11)
-    style.paragraph_format.space_before = 0
-    style.paragraph_format.space_after = 0
-    style.paragraph_format.line_spacing = 1.0
-    for log_file in log_files:
-        raw = export_relevant(log_file, "string")
+def create_word_output(log_files: list[str], out_path: str) -> None:
+    rtf = [r"{\rtf1\ansi", r"{\fonttbl\f0 Arial;}",
+        r"{\colortbl;\red0\green128\blue129;}", r"\fs22"]
+    for f in log_files:
+        raw = export_relevant(f, "string")
         if not raw:
-            doc.add_paragraph(f"{log_file} ⚠️  error while parsing")
-            doc.add_paragraph(""), doc.add_paragraph("")
+            rtf.append(_escape_rtf(f"{f} Error while parsing") + r"\par\par")
             continue
-
         blocks = [b.strip() for b in re.split(r"\n\s*\n", raw) if b.strip()]
-        header = doc.add_paragraph(blocks[0])
-        run = header.runs[0]
-        run.font.size, run.font.bold = Pt(16), True
-        run.font.color.rgb = RGBColor(0x00, 0x80, 0x81)
-
+        rtf.append(r"{\b\cf1\fs32 " + _escape_rtf(blocks[0]) + r"}\par")  # header 16 pt, bold, teal
         for line in "\n".join(blocks[1:]).splitlines():
             if line.strip():
-                doc.add_paragraph(line.strip())
-
-        doc.add_paragraph(""), doc.add_paragraph("")
-    return doc
+                rtf.append(_escape_rtf(line.strip()) + r"\par")
+        rtf.append(r"\par")
+    rtf.append("}")
+    with open(out_path, "w", encoding="utf-8") as file:
+        file.write("\n".join(rtf))
 
 
 def create_xyz_output(log_files):
-    note = "#You can open this file using our opensource XYZ Viewer: https://js-elictes.github.io/MisaXYZ/"
     merged_geometries = []
     for log_file in log_files:
         data = export_relevant(log_file, "variables")
@@ -162,9 +146,9 @@ def create_xyz_output(log_files):
         merged_geometries.append({'atoms': coord_lines, 'comment': comment})
     if not merged_geometries:
         return None
-    merged_string = ""
+    merged_string = "# You can open this file using our opensource XYZ Viewer: https://js-elictes.github.io/RSI-MolKit-Viewer/\n\n"
     for i, geom in enumerate(merged_geometries):
-        count_line = f"{len(geom['atoms'])}{' ' + note if i == 0 else ''}\n"
+        count_line = f"{len(geom['atoms'])}\n"
         merged_string += count_line
         merged_string += f"{geom['comment']}\n"
         merged_string += "\n".join(geom['atoms']) + "\n"
@@ -175,23 +159,24 @@ if __name__ == "__main__":
     option = input_prompt()
     log_files = [f for f in os.listdir() if f.endswith('.log')]
     timestamp = datetime.now().strftime("%d%m%Y")
-    actions = {"excel": ("MolKit_Excel", lambda f: create_excel_output(log_files).save(f)),
-        "docs":  ("MolKit_Docs",  lambda f: create_docs_output(log_files).save(f)),
-        "xyz":   ("MolKit_XYZ",   lambda f: open(f, "w").write(create_xyz_output(log_files)))}
+    actions = {
+        "excel": ("MolKit_Word", lambda p: create_excel_output(log_files, p)),
+        "docs":  ("MolKit_Excel", lambda p: create_word_output(log_files, p)),
+        "xyz":   ("MolKit_XYZ",   lambda p: open(p, "w").write(create_xyz_output(log_files)))
+    }
     selected = actions if option == "all" else {option: actions[option]}
     for name, (prefix, func) in selected.items():
-        ext = "docx" if name == "docs" else "xyz" if name == "xyz" else "xlsx"
+        ext = {"excel": "csv", "docs": "rtf", "xyz": "xyz"}[name]
         filename = do_not_overwrite(f"{prefix}_{timestamp}.{ext}")
         func(filename)
-        print(f"\n{ name.capitalize() } file created: {os.path.abspath(filename)}\n")
+        print(f"\033[1m{ name.capitalize() } file created: {os.path.abspath(filename)}\033[0m\n")
     if option == "all":
         error_rate = max(1, error_rate // 3)
-        print("All files created")
-    print(f"\n  -- Finished -- {error_rate} out of {len(log_files)} files encountered an Error --\n")
+    print(f"\n  \033[1m-- Finished -- {error_rate} out of {len(log_files)} files encountered an Error --\033[0m\n")
     print(r"""             __..--''``---....___   _..._    __
-   /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
-  ///_.-' _..--.'_    \                    `( ) ) // //
-  / (_..-' // (< _     ;_..__               ; `' / ///
-   / // // //  `-._,_)' // / ``--...____..-' /// / //\
-""")
+        /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
+        ///_.-' _..--.'_    \                    `( ) ) // //
+        / (_..-' // (< _     ;_..__               ; `' / ///
+        / // // //  `-._,_)' // / ``--...____..-' /// / //\
+        """)
     quit()
