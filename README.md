@@ -2,7 +2,7 @@
 
 **RSI MolKit Extractor** is a simple tool to extract geometries and thermodynamic data from Gaussian `.log` files, designed to quickly produce clean outputs for publications or analysis, including Excel summaries, Word documents, or `.xyz` structure files.
 
-🔗 For instant web visualization of XYZ files, use the ([RSI MolKit Viewer] https://js-elictes.github.io/RSI-MolKit-Viewer/)
+🔗 For instant web visualization of XYZ files, use the [RSI MolKit Viewer](https://js-elictes.github.io/RSI-MolKit-Viewer/).
 
 ## 🧪 How It Works
 
