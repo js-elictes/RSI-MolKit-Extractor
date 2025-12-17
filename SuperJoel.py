@@ -138,7 +138,7 @@ def create_xyz_output(log_files):
     for log_file in log_files:
         data = export_relevant(log_file, "variables")
         if not data:
-            logging.error(f"\033[1m Skipping {log_file}: missing data\033[0m")
+            logging.error(f"\033[1m  -> missing data\033[0m")
             continue
         frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
         coord_lines = [line for line in ngeom.splitlines() if line.strip()]
