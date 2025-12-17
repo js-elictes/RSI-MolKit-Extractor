@@ -58,7 +58,7 @@ def export_relevant(log_file, option):
         for i in geom.splitlines():
             num, atom, atype, x, y, z = i.split()
             ngeom = ngeom + " ".join([atom, " ", x, " ", y, " ", z]) + "\n"
-        logging.info(f" Processing file  :  {log_file}")
+        logging.info(f" Processing  ->  {log_file}")
         if option == "variables":
             charge = int(re.search(r'-?\d+', re.search(r'Charge = .*?(?= Multiplicity)', frq_calc).group(0)).group())
             mult = int(re.search(r'-?\d+', re.search(r'Multiplicity = .*?\n', frq_calc).group(0)).group())
@@ -138,7 +138,8 @@ def create_xyz_output(log_files):
     for log_file in log_files:
         data = export_relevant(log_file, "variables")
         if not data:
-            logging.error(f"\033[1m  -> missing data\033[0m")
+            #logging.error(f"\033[F\033[1m Critical failure :  {log_file} -> missing data\033[0m")
+            logging.error(f"\033[A\033[K\033[1m {log_file} is missing data\033[0m")
             continue
         frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
         coord_lines = [line for line in ngeom.splitlines() if line.strip()]
@@ -169,10 +170,10 @@ if __name__ == "__main__":
         ext = {"excel": "csv", "docs": "rtf", "xyz": "xyz"}[name]
         filename = do_not_overwrite(f"{prefix}_{timestamp}.{ext}")
         func(filename)
-        print(f"\033[1m\n{ name.capitalize() } file created:\033[0m {os.path.abspath(filename)}\n")
+        print(f"\033[1m\n{ name.capitalize() } file created:\033[0m {os.path.abspath(filename)}")
     if option == "all":
         error_rate = max(1, error_rate // 3)
-    print(f"\n  \033[1m   Finished · {error_rate} out of {len(log_files)} files encountered an Error\033[0m\n")
+    print(f"\n  \033[1m   Finished · {error_rate}/{len(log_files)} files unsucessful -> wrong format\033[0m\n")
     print(r"""          __..--''``---....___   _..._    __
      /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
      ///_.-' _..--.'_    \                    `( ) ) // //
