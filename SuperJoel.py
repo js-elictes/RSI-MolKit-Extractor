@@ -11,7 +11,7 @@ import csv
 from datetime import datetime
 
 # Constants and logging
-__version__ = "2.0 -- 23.06.2025"
+__version__ = "2.1"
 Hartree_to_kJ = 2625.4996394799
 error_rate = 0
 logging.basicConfig(level=logging.INFO)
@@ -27,17 +27,17 @@ def do_not_overwrite(path):
 
 
 def input_prompt():
-    print(f"\n\033[1m  -- RSI MolKit Extractor {__version__} by Jonáš Schröder --\033[0m")
+    print(f"\n\033[1m   RSI MolKit Extractor v{__version__} ·  Roithová Group 17.12.2025\033[0m")
     options = {"excel": "excel", "e": "excel",
                "docs": "docs", "d": "docs",
                "xyz": "xyz", "x": "xyz",
                "all": "all", "a": "all"}
     while True:
-        choice = input("\nOutput -> [E]xcel (.csv) / [D]ocs (.rtf) / [X]YZ / [A]ll: ").lower()
+        choice = input("\nOutput -> [E]xcel (.csv) \n          [D]ocs (.rtf) \n          [X]YZ \n          [A]ll\n          ->  ").lower()
         if choice in options:
-            print("\n  -- \033[1mprocessing\033[0m -- \n")
+            print("")
             return options[choice]
-        logging.error(" -Select a valid option-")
+        logging.error(" Select a valid option")
 
 
 def export_relevant(log_file, option):
@@ -76,7 +76,7 @@ def export_relevant(log_file, option):
             outstr = "\n\n".join([log_file, frq_header, chrgandmult, thermochem, lowfrqs])
             return outstr
     except Exception as e:
-        logging.error(f" Critical failure :  {log_file}")
+        logging.error(f"\033[1m Critical failure :  {log_file}\033[0m")
         error_rate += 1
         outstr = "\n\n".join([log_file, "This file encountered an Error\n"])
         if option == "variables":
@@ -138,7 +138,7 @@ def create_xyz_output(log_files):
     for log_file in log_files:
         data = export_relevant(log_file, "variables")
         if not data:
-            logging.error(f" Skipping {log_file}: export_relevant did not extract data.")
+            logging.error(f"\033[1m Skipping {log_file}: missing data\033[0m")
             continue
         frq_header, charge, mult, imag, E_tot, E_ok, H_298k, G_298k, ngeom = data
         coord_lines = [line for line in ngeom.splitlines() if line.strip()]
@@ -160,8 +160,8 @@ if __name__ == "__main__":
     log_files = [f for f in os.listdir() if f.endswith('.log')]
     timestamp = datetime.now().strftime("%d%m%Y")
     actions = {
-        "excel": ("MolKit_Word", lambda p: create_excel_output(log_files, p)),
-        "docs":  ("MolKit_Excel", lambda p: create_word_output(log_files, p)),
+        "excel": ("MolKit_Excel", lambda p: create_excel_output(log_files, p)),
+        "docs":  ("MolKit_Word", lambda p: create_word_output(log_files, p)),
         "xyz":   ("MolKit_XYZ",   lambda p: open(p, "w").write(create_xyz_output(log_files)))
     }
     selected = actions if option == "all" else {option: actions[option]}
@@ -169,14 +169,14 @@ if __name__ == "__main__":
         ext = {"excel": "csv", "docs": "rtf", "xyz": "xyz"}[name]
         filename = do_not_overwrite(f"{prefix}_{timestamp}.{ext}")
         func(filename)
-        print(f"\033[1m{ name.capitalize() } file created: {os.path.abspath(filename)}\033[0m\n")
+        print(f"\033[1m\n{ name.capitalize() } file created:\033[0m {os.path.abspath(filename)}\n")
     if option == "all":
         error_rate = max(1, error_rate // 3)
-    print(f"\n  \033[1m-- Finished -- {error_rate} out of {len(log_files)} files encountered an Error --\033[0m\n")
-    print(r"""             __..--''``---....___   _..._    __
-        /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
-        ///_.-' _..--.'_    \                    `( ) ) // //
-        / (_..-' // (< _     ;_..__               ; `' / ///
-        / // // //  `-._,_)' // / ``--...____..-' /// / //\
+    print(f"\n  \033[1m   Finished · {error_rate} out of {len(log_files)} files encountered an Error\033[0m\n")
+    print(r"""          __..--''``---....___   _..._    __
+     /// //_.-'    .-/";  `        ``<._  ``.''_ `. / // /
+     ///_.-' _..--.'_    \                    `( ) ) // //
+     / (_..-' // (< _     ;_..__               ; `' / ///
+     / // // //  `-._,_)' // / ``--...____..-' /// / //\
         """)
     quit()
